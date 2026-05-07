@@ -1,0 +1,8 @@
+.env
+live_log.csv
+live_log_*.csv
+*.bak
+__pycache__/
+.claude/
+.vscode/
+.idea/

@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>WTI 永续合约定价模型</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#0d1117;color:#e6edf3}
+.app{display:grid;grid-template-columns:350px 1fr;height:100vh}
+
+/* 左面板 */
+.L{background:#161b22;padding:16px;overflow-y:auto;border-right:1px solid #30363d}
+.L h1{font-size:15px;color:#58a6ff;margin-bottom:2px}
+.L .sub{font-size:10px;color:#8b949e;margin-bottom:14px;font-family:Consolas,monospace}
+.ctrl{margin-bottom:14px}
+.ctrl label{display:block;font-size:11px;color:#8b949e;margin-bottom:3px}
+.ctrl .r{display:flex;align-items:center;gap:6px}
+.ctrl input[type=range]{flex:1;accent-color:#58a6ff;height:5px}
+.ctrl input[type=number]{width:76px;background:#0d1117;border:1px solid #30363d;color:#e6edf3;padding:3px 5px;border-radius:4px;font-size:12px;font-family:Consolas,monospace}
+.ctrl .tag{font-size:10px;color:#58a6ff;font-family:Consolas,monospace}
+.tdisp{font-size:11px;color:#c9d1d9;margin-top:3px;font-family:Consolas,monospace}
+.rbox{background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:12px;margin-bottom:12px}
+.rbox .lb{font-size:10px;color:#8b949e}
+.rbox .v{font-size:24px;font-weight:700;font-family:Consolas,monospace;color:#58a6ff}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px}
+.g3 .c{background:#0d1117;border:1px solid #30363d;border-radius:5px;padding:7px}
+.g3 .c .lb{font-size:9px;color:#8b949e}
+.g3 .c .v{font-size:13px;font-family:Consolas,monospace;margin-top:1px}
+.fbox{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:8px;margin-bottom:12px;font-size:10px;font-family:Consolas,monospace;color:#8b949e;line-height:1.5}
+.fbox .b{color:#58a6ff}.fbox .r{color:#f47067}.fbox .y{color:#d29922}.fbox .g{color:#3fb950}
+.sched{font-size:10px;font-family:Consolas,monospace;margin-bottom:12px}
+.sched table{width:100%;border-collapse:collapse}
+.sched th{text-align:left;color:#8b949e;padding:2px 3px;border-bottom:1px solid #30363d}
+.sched td{padding:2px 3px;color:#c9d1d9}
+.sched tr.active td{color:#58a6ff;font-weight:600}
+.sched tr.passed td{color:#484f58}
+.livepanel{display:none;background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:10px;margin-bottom:12px;font-family:Consolas,monospace;font-size:11px}
+
+/* 右面板 */
+.R{padding:16px;overflow-y:auto}
+.R h2{font-size:13px;color:#8b949e;margin-bottom:3px}
+.hint{font-size:9px;color:#484f58;margin-bottom:4px}
+.leg{display:flex;gap:12px;font-size:10px;color:#8b949e;margin-bottom:4px}
+.leg span{display:flex;align-items:center;gap:3px}
+.leg .d{width:8px;height:3px;border-radius:1px;display:inline-block}
+.cbox{height:400px;position:relative;margin-bottom:10px}
+.cbox.sm{height:300px}
+.cbox canvas{position:absolute;top:0;left:0;width:100%;height:100%;border-radius:6px;background:#0d1117;border:1px solid #30363d;cursor:grab}
+.cbox canvas:active{cursor:grabbing}
+.hsec{display:none}
+</style>
+</head>
+<body>
+<div class="app">
+<div class="L">
+  <h1>WTI 永续合约定价模型 <span id="utcClock" style="font-size:11px;color:#8b949e;font-family:Consolas,monospace;font-weight:400"></span></h1>
+  <div class="sub">P(t) = O(t) + b(t)</div>
+
+  <div class="ctrl"><label>F — 前月 CME <span class="tag">CLM26</span></label>
+    <div class="r"><input type="number" id="Fi" min="60" max="160" step="0.01" value="112.00" style="width:100px"></div><input type="hidden" id="Fs" value="112"></div>
+  <div class="ctrl"><label>N — 次月 CME <span class="tag">CLN26</span></label>
+    <div class="r"><input type="number" id="Ni" min="60" max="160" step="0.01" value="98.00" style="width:100px"></div><input type="hidden" id="Ns" value="98"></div>
+  <div class="ctrl"><label>t — 时刻</label>
+    <div class="r"><input type="number" id="ti" min="0" max="2160" step="1" value="576" style="width:100px"></div><input type="hidden" id="ts" value="576">
+    <div class="tdisp" id="td"></div></div>
+
+  <div style="margin-bottom:12px">
+    <button id="liveBtn" style="background:#238636;color:#fff;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;font-size:12px;font-family:Consolas">▶ 实时模式</button>
+    <span id="liveStatus" style="font-size:10px;color:#484f58;margin-left:6px"></span>
+  </div>
+
+  <div class="livepanel" id="livePanel">
+    <div style="color:#3fb950;margin-bottom:4px">● 实时数据 <span id="lvTS" style="color:#8b949e;font-size:9px"></span></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;font-size:10px">
+      <div>F (CLM26)</div><div id="lvF">—</div>
+      <div>N (CLN26)</div><div id="lvN">—</div>
+      <div>S = F−N</div><div id="lvS">—</div>
+      <div>S / Oracle</div><div id="lvSp">—</div>
+      <div style="border-top:1px solid #21262d;padding-top:2px">模型价</div><div style="color:#58a6ff;border-top:1px solid #21262d;padding-top:2px" id="lvP0">—</div>
+      <div>模型价(+1h)</div><div style="color:#58a6ff" id="lvP1">—</div>
+      <div>实际 xyz:CL</div><div style="color:#3fb950" id="lvHL">—</div>
+      <div>偏差</div><div style="color:#d29922" id="lvDev">—</div>
+      <div>实际 FR APR</div><div style="color:#a371f7" id="lvFR">—</div>
+      <div style="border-top:1px solid #21262d;padding-top:2px;color:#f0883e">Boros 剩余</div><div style="border-top:1px solid #21262d;padding-top:2px" id="lvBorosHrs">—</div>
+      <div style="color:#f0883e">累计 FR</div><div id="lvBorosCum">—</div>
+      <div style="color:#f0883e">平均 FR APR</div><div id="lvBorosAPR">—</div>
+      <div style="border-top:1px solid #21262d;padding-top:2px">数据延迟</div><div style="border-top:1px solid #21262d;padding-top:2px" id="lvLag">—</div>
+    </div>
+  </div>
+
+
+  <div style="display:flex;gap:8px;margin-bottom:12px">
+    <div class="rbox" style="flex:1;margin-bottom:0"><div class="lb">模型价 P(t)</div><div class="v" id="vP"></div></div>
+    <div class="rbox" style="flex:1;margin-bottom:0"><div class="lb" style="color:#3fb950">BN模型价</div><div class="v" style="color:#3fb950" id="vPbn"></div></div>
+  </div>
+  <div class="g3">
+    <div class="c"><div class="lb">Oracle O(t)</div><div class="v" style="color:#f47067" id="vO"></div></div>
+    <div class="c"><div class="lb">基差 b</div><div class="v" style="color:#d29922" id="vB"></div></div>
+    <div class="c"><div class="lb">b / O</div><div class="v" style="color:#d29922" id="vBp"></div></div>
+    <div class="c"><div class="lb">价差 S</div><div class="v" id="vS"></div></div>
+    <div class="c"><div class="lb">权重 w</div><div class="v" id="vW"></div></div>
+    <div class="c"><div class="lb">δ = 0.2S</div><div class="v" id="vD"></div></div>
+    <div class="c"><div class="lb">剩余换月</div><div class="v" id="vR"></div></div>
+    <div class="c"><div class="lb">本小时FR</div><div class="v" style="color:#a371f7" id="vFR"></div></div>
+    <div class="c"><div class="lb">FR 年化</div><div class="v" style="color:#a371f7" id="vFA"></div></div>
+  </div>
+
+  <div class="fbox">
+    <div style="color:#c9d1d9">公理</div>
+    <div>1. <span class="r">O</span> = w·F + (1-w)·N</div>
+    <div>2. FR = 0.5·[P + clamp(r-P, ±0.0005)] / 8</div>
+    <div>3. E[PnL<sub>hedge</sub>] = 0 ∀t</div>
+    <div style="margin-top:4px;color:#c9d1d9">符号</div>
+    <div><span class="r">O</span> Oracle · <span class="b">P</span> 模型价 · <span class="y">b</span> = P−O</div>
+    <div>F 前月 · N 次月 · S = F−N · w 权重</div>
+    <div>δ = 0.2S · r = 0.01%/8h · <span class="g">FR</span> funding/hr</div>
+  </div>
+
+  <div class="sched"><table>
+    <tr><th>事件</th><th>UTC (5:30PM ET)</th><th>w→</th></tr>
+    <tr id="rd1"><td>RD1</td><td>05/08 21:30</td><td>0.80</td></tr>
+    <tr id="rd2"><td>RD2</td><td>05/11 21:30</td><td>0.60</td></tr>
+    <tr id="rd3"><td>RD3</td><td>05/12 21:30</td><td>0.40</td></tr>
+    <tr id="rd4"><td>RD4</td><td>05/13 21:30</td><td>0.20</td></tr>
+    <tr id="rd5"><td>RD5</td><td>05/14 21:30</td><td>0.00</td></tr>
+  </table></div>
+</div>
+
+<div class="R">
+  <h2>价格曲线</h2>
+  <div class="leg"><span><span class="d" style="background:#f47067"></span>Oracle</span><span><span class="d" style="background:#58a6ff"></span>模型价</span><span><span class="d" style="background:#30363d"></span>CME关</span><span><span class="d" style="background:#da3633;height:1px"></span>换月</span></div>
+  <div class="hint">滚轮缩放 · 拖拽平移 · 双击重置</div>
+  <div class="cbox" id="pw"><canvas id="pc"></canvas></div>
+
+  <h2>BN模型 (Binance规则, 无0.5×, 休市Oracle固定)</h2>
+  <div class="leg"><span><span class="d" style="background:#f47067"></span>Oracle</span><span><span class="d" style="background:#3fb950"></span>BN模型价</span></div>
+  <div class="cbox" id="pw2"><canvas id="pc2"></canvas></div>
+
+  <h2>基差 b(t)</h2>
+  <div class="cbox sm" id="bw"><canvas id="bc"></canvas></div>
+
+  <h2>对冲比例 (参考)</h2>
+  <div class="leg"><span><span class="d" style="background:#f47067"></span>空F (前月) %</span><span><span class="d" style="background:#58a6ff"></span>空N (次月) %</span></div>
+  <div class="cbox sm" id="dw"><canvas id="dc"></canvas></div>
+
+  <div class="hsec" id="hsec">
+    <h2>价格: 模型 vs 实际</h2>
+    <div class="leg"><span><span class="d" style="background:#58a6ff"></span>模型</span><span><span class="d" style="background:#3fb950"></span>实际</span></div>
+    <div class="cbox sm" id="h1w"><canvas id="h1c"></canvas></div>
+
+    <h2>偏差 (实际−模型) %</h2>
+    <div class="cbox sm" id="h2w"><canvas id="h2c"></canvas></div>
+
+    <h2>模型 Funding APR</h2>
+    <div class="cbox sm" id="h3w"><canvas id="h3c"></canvas></div>
+
+    <h2>实际 Funding APR</h2>
+    <div class="cbox sm" id="h4w"><canvas id="h4c"></canvas></div>
+
+    <h2>Boros 平均 FR APR (到期前)</h2>
+    <div class="cleg"><span><span class="d" style="background:#f0883e"></span>Boros APR</span></div>
+    <div class="cbox sm" id="h5w"><canvas id="h5c"></canvas></div>
+  </div>
+</div>
+</div>
+
+<script>
+// ================================================================
+// 模型 (从 exchange_v3.py 移植, v3 迭代求解)
+// ================================================================
+const STEP_MIN=60,SPH=1; // 60分钟步长, 每小时1步
+const R_INT=0.0001,CAP=0.04,BETA=Math.exp(-STEP_MIN/60);
+const ENTRY=new Date(Date.UTC(2026,4,1,0,0)),END=new Date(Date.UTC(2026,4,16,0,0));
+const TH=Math.round((END-ENTRY)/(STEP_MIN*60000))+1;
+const RD=[new Date(Date.UTC(2026,4,8,22,0)),new Date(Date.UTC(2026,4,11,22,0)),new Date(Date.UTC(2026,4,12,22,0)),new Date(Date.UTC(2026,4,13,22,0)),new Date(Date.UTC(2026,4,14,22,0))];
+const RH=RD.map(d=>Math.round((d-ENTRY)/(STEP_MIN*60000))),RS=new Set(RH);
+const RH_LINE=RD.map(d=>(d-ENTRY)/(STEP_MIN*60000)-0.5*SPH);
+
+function hd(h){return new Date(ENTRY.getTime()+h*STEP_MIN*60000)}
+function fmt(h){const d=hd(h);return `${String(d.getUTCMonth()+1).padStart(2,'0')}/${String(d.getUTCDate()).padStart(2,'0')} ${String(d.getUTCHours()).padStart(2,'0')}:00 UTC`}
+function isExt(h){const d=hd(h),wd=d.getUTCDay(),hr=d.getUTCHours();if(wd===6)return false;if(wd===0)return hr>=22;if(wd===5)return hr<21;return !(hr>=21&&hr<22)}
+function isOff(h){return !isExt(h)}
+function gw(h){return Math.max(0,1-0.2*RH.filter(r=>r<=h).length)}
+function oP(F,N,w){return w*F+(1-w)*N}
+function fp(b,O){if(O<=0)return 0;const P=b/O,c=Math.max(-0.0005,Math.min(0.0005,R_INT-P));return Math.max(-CAP,Math.min(CAP,0.5*(P+c)/8))/SPH*O}
+function frr(b,O){if(O<=0)return 0;const P=b/O,c=Math.max(-0.0005,Math.min(0.0005,R_INT-P));return Math.max(-CAP,Math.min(CAP,0.5*(P+c)/8))}
+
+// BN模型: Binance规则, 1h步长, 4h结算一次funding, 无0.5×缩放, 休市Oracle固定
+const STEP2=60;
+const SPH2=1;
+const TH2=Math.round((END-ENTRY)/(STEP2*60000))+1;
+// BN roll时间: 21:00 UTC; 休市Oracle冻结, 周五roll自然顺延到开盘
+const RD_BN=[new Date(Date.UTC(2026,4,8,22,0)),new Date(Date.UTC(2026,4,11,22,0)),new Date(Date.UTC(2026,4,12,22,0)),new Date(Date.UTC(2026,4,13,22,0)),new Date(Date.UTC(2026,4,14,22,0))];
+const RH_BN=RD_BN.map(d=>Math.round((d-ENTRY)/(STEP2*60000)));
+const BN_CAP_4H=0.005; // ±0.5% per 4h settlement
+// BN funding: 结算在UTC 0,4,8,12,16,20, funding在前一步生效使阶梯对齐结算点
+function isBNSettle(s){const d=new Date(ENTRY.getTime()+s*STEP2*60000);return (d.getUTCHours()+1)%4===0}
+function fp2(b,O,s){if(O<=0||!isBNSettle(s))return 0;const P=b/O,c=Math.max(-0.0005,Math.min(0.0005,R_INT-P));return Math.max(-BN_CAP_4H,Math.min(BN_CAP_4H,(P+c)/2))*O}
+function gw2(s){
+  let passed=0;
+  for(const rh of RH_BN){if(rh<=s)passed++}
+  return Math.max(0,1-0.2*passed);
+}
+
+function computeFixed(F,N){
+  // BN 新规则 (2026-05-08起): 休市Oracle用EMA追踪perp (借用HL参数 τ=1h)
+  const oA=new Float64Array(TH2),bA=new Float64Array(TH2),pA=new Float64Array(TH2);
+  const ef=new Uint8Array(TH2),eO=new Float64Array(TH2);
+  for(let s=0;s<TH2;s++){
+    eO[s]=oP(F,N,gw2(s));
+    const d=new Date(ENTRY.getTime()+s*STEP2*60000),wd=d.getUTCDay(),hr=d.getUTCHours();
+    let ext=true;
+    if(wd===6) ext=false;
+    else if(wd===0) ext=(hr>=22);
+    else if(wd===5) ext=(hr<21);
+    else ext=!(hr>=21&&hr<22);
+    ef[s]=ext?1:0;
+  }
+  // 迭代收敛: oracle在休市时依赖perp (循环), 用迭代解
+  let perp=new Float64Array(TH2);for(let s=0;s<TH2;s++)perp[s]=eO[s];
+  for(let iter=0;iter<30;iter++){
+    oA[0]=eO[0];
+    for(let s=1;s<TH2;s++){if(ef[s])oA[s]=eO[s];else oA[s]=BETA*oA[s-1]+(1-BETA)*perp[s]}
+    // 反向归纳
+    bA[TH2-1]=-0.0005*oA[TH2-1];
+    for(let s=TH2-2;s>=0;s--){const Os=oA[s],tgt=bA[s+1]+(oA[s+1]-Os);let b=tgt;
+      for(let i=0;i<30;i++){const f=fp2(b,Os,s),r=b+f-tgt;if(Math.abs(r)<1e-12)break;const d=1+(fp2(b+1e-8,Os,s)-f)/1e-8;if(Math.abs(d)<1e-15)break;b-=r/d}
+      bA[s]=b}
+    let mx=0;for(let s=0;s<TH2;s++){const np=oA[s]+bA[s];mx=Math.max(mx,Math.abs(np-perp[s]));perp[s]=np}
+    if(mx<1e-10)break;
+  }
+  // 最终一致性
+  oA[0]=eO[0];
+  for(let s=1;s<TH2;s++){if(ef[s])oA[s]=eO[s];else oA[s]=BETA*oA[s-1]+(1-BETA)*perp[s]}
+  for(let s=0;s<TH2;s++){bA[s]=perp[s]-oA[s];pA[s]=perp[s]}
+  return {oracle:oA,pfair:pA,basis:bA,total:TH2}
+}
+
+
+function compute(F,N){
+  const S=F-N,delta=0.2*S;
+  const oA=new Float64Array(TH),bA=new Float64Array(TH),pA=new Float64Array(TH),fA=new Float64Array(TH);
+  const ef=new Uint8Array(TH),eO=new Float64Array(TH);
+  for(let h=0;h<TH;h++){eO[h]=oP(F,N,gw(h));ef[h]=isExt(h)?1:0}
+  let perp=new Float64Array(TH);for(let h=0;h<TH;h++)perp[h]=eO[h];
+  for(let iter=0;iter<30;iter++){
+    oA[0]=ef[0]?eO[0]:eO[0];
+    for(let h=1;h<TH;h++){if(ef[h])oA[h]=eO[h];else oA[h]=BETA*oA[h-1]+(1-BETA)*perp[h]}
+    bA[TH-1]=-0.0005*oA[TH-1];
+    for(let h=TH-2;h>=0;h--){const Oh=oA[h],tgt=bA[h+1]+(oA[h+1]-Oh);let b=tgt;for(let i=0;i<30;i++){const f=fp(b,Oh),r=b+f-tgt;if(Math.abs(r)<1e-12)break;const d=1+(fp(b+1e-8,Oh)-f)/1e-8;if(Math.abs(d)<1e-15)break;b-=r/d}bA[h]=b}
+    let mx=0;for(let h=0;h<TH;h++){const np=oA[h]+bA[h];mx=Math.max(mx,Math.abs(np-perp[h]));perp[h]=np}
+    if(mx<1e-10)break;
+  }
+  oA[0]=ef[0]?eO[0]:eO[0];
+  for(let h=1;h<TH;h++){if(ef[h])oA[h]=eO[h];else oA[h]=BETA*oA[h-1]+(1-BETA)*perp[h]}
+  for(let h=0;h<TH;h++){bA[h]=perp[h]-oA[h];fA[h]=frr(bA[h],oA[h]);pA[h]=perp[h]}
+  return{oracle:oA,pfair:pA,basis:bA,frate:fA}
+}
+
+// ================================================================
+// 可缩放图表类
+// ================================================================
+class ZC{
+  constructor(ci,wi,total){
+    this.c=document.getElementById(ci);this.w=document.getElementById(wi);this.x=this.c.getContext('2d');
+    this.N=total;this.vL=0;this.vR=total-1;this.dr=false;this.dx=0;this.dL=0;this.dR=0;
+    this.c.addEventListener('wheel',e=>{e.preventDefault();this._wh(e)},{passive:false});
+    this.c.addEventListener('mousedown',e=>{this.dr=true;this.wasDrag=false;this.dx=e.clientX;this.dL=this.vL;this.dR=this.vR;this.c.style.cursor='grabbing'});
+    window.addEventListener('mousemove',e=>this._mv(e));
+    window.addEventListener('mouseup',()=>{this.dr=false;this.c.style.cursor='grab'});
+    this.c.addEventListener('dblclick',()=>{this.vL=0;this.vR=this.N-1;this._cb&&this._cb()});
+  }
+  _wh(e){const rc=this.c.getBoundingClientRect(),f=(e.clientX-rc.left)/rc.width,rng=this.vR-this.vL,z=e.deltaY>0?1.15:1/1.15;
+    let nr=Math.max(20,Math.min(this.N,rng*z)),cn=this.vL+rng*f;this.vL=Math.max(0,cn-nr*f);this.vR=Math.min(this.N-1,this.vL+nr);this.vL=this.vR-nr;if(this.vL<0){this.vL=0;this.vR=nr}this._cb&&this._cb()}
+  _mv(e){if(!this.dr)return;this.wasDrag=true;const rc=this.c.getBoundingClientRect(),dx=e.clientX-this.dx,rng=this.dR-this.dL,hp=rng/rc.width;
+    let nL=this.dL-dx*hp,nR=nL+rng;if(nL<0){nL=0;nR=rng}if(nR>this.N-1){nR=this.N-1;nL=nR-rng}this.vL=nL;this.vR=nR;this._cb&&this._cb()}
+  sync(o){this.vL=o.vL;this.vR=o.vR}
+}
+
+// 模型图表
+const zP=new ZC('pc','pw',TH),zP2=new ZC('pc2','pw2',TH2),zB=new ZC('bc','bw',TH),zD=new ZC('dc','dw',TH);
+const modelZooms=[zP,zP2,zB,zD];
+function modelRedraw(){drawModel();drawModelFixed();drawBasis();drawDelta()}
+for(const z of modelZooms){
+  z._cb=()=>{for(const o of modelZooms)if(o!==z)o.sync(z);modelRedraw()};
+}
+
+// 点击十字线 (4表联动), crossStep 用1h步索引
+let crossStep=null;
+function onModelClick(e,z){
+  const rc=z.c.getBoundingClientRect(),p={l:52,r:50};
+  const cx=e.clientX-rc.left;
+  if(cx<p.l||cx>rc.width-p.r){crossStep=null;modelRedraw();return}
+  const frac=(cx-p.l)/(rc.width-p.l-p.r);
+  let s=Math.round(z.vL+frac*(z.vR-z.vL));
+  crossStep=(crossStep===s)?null:s;
+  modelRedraw();
+}
+for(const z of [zP,zP2,zB,zD]){
+  z.c.addEventListener('click',e=>{if(z.wasDrag)return;onModelClick(e,z)});
+}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&crossStep!==null){crossStep=null;modelRedraw()}})
+
+function drawModel(){
+  if(!cv)return;
+  const z=zP,c=z.c,x=z.x,dp=devicePixelRatio||1,rc=z.w.getBoundingClientRect();
+  c.width=rc.width*dp;c.height=rc.height*dp;c.style.width=rc.width+'px';c.style.height=rc.height+'px';x.scale(dp,dp);
+  const W=rc.width,H=rc.height,p={t:18,r:50,b:26,l:52},cw=W-p.l-p.r,ch=H-p.t-p.b;x.clearRect(0,0,W,H);
+  const vL=Math.floor(z.vL),vR=Math.ceil(z.vR),F=parseFloat($('Fi').value),N=parseFloat($('Ni').value);
+  const yMn=Math.min(F,N)-2,yMx=Math.max(F,N)+2;
+  const xO=h=>p.l+((h-vL)/(vR-vL))*cw,yO=v=>p.t+(1-(v-yMn)/(yMx-yMn))*ch;
+  // CME关闭底色
+  x.fillStyle='rgba(48,54,61,0.25)';for(let h=vL;h<=vR;h++){if(isOff(h))x.fillRect(xO(h),p.t,cw/(vR-vL),ch)}
+  // 换月线
+  x.strokeStyle='#da363360';x.lineWidth=1;x.setLineDash([4,4]);
+  for(const r of RH_LINE){if(r>=vL&&r<=vR){x.beginPath();x.moveTo(xO(r),p.t);x.lineTo(xO(r),p.t+ch);x.stroke()}}x.setLineDash([]);
+  // F/N 参考
+  x.strokeStyle='#f4706730';x.lineWidth=1;x.setLineDash([2,6]);x.beginPath();x.moveTo(p.l,yO(F));x.lineTo(W-p.r,yO(F));x.stroke();
+  x.strokeStyle='#58a6ff30';x.beginPath();x.moveTo(p.l,yO(N));x.lineTo(W-p.r,yO(N));x.stroke();x.setLineDash([]);
+  x.font='9px Consolas';x.fillStyle='#f4706780';x.textAlign='right';x.fillText('F=$'+F.toFixed(1),W-p.r-3,yO(F)-3);
+  x.fillStyle='#58a6ff80';x.fillText('N=$'+N.toFixed(1),W-p.r-3,yO(N)+10);
+  // 阶梯线
+  function st(d,cl,lw){x.strokeStyle=cl;x.lineWidth=lw;x.beginPath();for(let h=vL;h<=vR;h++){if(h<0||h>=TH)continue;const x0=xO(h),x1=xO(h+1),y=yO(d[h]);h===vL?x.moveTo(x0,y):x.lineTo(x0,y);x.lineTo(Math.min(x1,W-p.r),y)}x.stroke()}
+  st(cv.oracle,'#f47067',2);st(cv.pfair,'#58a6ff',2);
+  // 当前时刻
+  const cur=Math.min(parseInt($('ti').value),TH-1);
+  if(cur>=vL&&cur<=vR){x.strokeStyle='#e6edf3';x.lineWidth=1.5;x.beginPath();x.moveTo(xO(cur),p.t);x.lineTo(xO(cur),p.t+ch);x.stroke();
+    x.fillStyle='#f47067';x.beginPath();x.arc(xO(cur),yO(cv.oracle[cur]),3.5,0,Math.PI*2);x.fill();
+    x.fillStyle='#58a6ff';x.beginPath();x.arc(xO(cur),yO(cv.pfair[cur]),3.5,0,Math.PI*2);x.fill();
+    x.font='10px Consolas';x.textAlign='left';
+    x.fillStyle='#f47067';x.fillText('O:$'+cv.oracle[cur].toFixed(2),xO(cur)+8,yO(cv.oracle[cur])-5);
+    x.fillStyle='#58a6ff';x.fillText('P:$'+cv.pfair[cur].toFixed(2),xO(cur)+8,yO(cv.pfair[cur])+12)}
+  // Y轴
+  x.fillStyle='#484f58';x.font='9px Consolas';x.textAlign='right';
+  for(let i=0;i<=6;i++){const v=yMn+(yMx-yMn)*i/6;x.fillText('$'+v.toFixed(1),p.l-4,yO(v)+3);x.strokeStyle='#21262d';x.lineWidth=.5;x.beginPath();x.moveTo(p.l,yO(v));x.lineTo(W-p.r,yO(v));x.stroke()}
+  // X轴
+  x.fillStyle='#484f58';x.textAlign='center';const hr=vR-vL,ds=hr>300?48:hr>120?24:hr>48?12:6;
+  for(let h=Math.ceil(vL/ds)*ds;h<=vR;h+=ds){const d=hd(h);x.fillText(ds>=24?`${d.getUTCMonth()+1}/${d.getUTCDate()}`:`${d.getUTCDate()}/${String(d.getUTCHours()).padStart(2,'0')}h`,xO(h),H-7)}
+  // 十字线
+  if(crossStep!==null&&crossStep>=vL&&crossStep<=vR&&crossStep>=0&&crossStep<TH){
+    const cs=crossStep,cx=xO(cs);
+    x.strokeStyle='#e6edf340';x.lineWidth=1;x.setLineDash([3,3]);x.beginPath();x.moveTo(cx,p.t);x.lineTo(cx,p.t+ch);x.stroke();x.setLineDash([]);
+    const dt=hd(cs),ts=`${dt.getUTCMonth()+1}/${dt.getUTCDate()} ${String(dt.getUTCHours()).padStart(2,'0')}:00`;
+    const oV=cv.oracle[cs],pV=cv.pfair[cs],frV=cv.frate[cs];
+    const lines=[ts,`O: $${oV.toFixed(2)}`,`P: $${pV.toFixed(2)}`,`FR: ${(frV*100).toFixed(4)}%/hr`,`APR: ${(frV*24*365*100).toFixed(1)}%`];
+    x.font='10px Consolas';const lh=14,bw=130,bh=lines.length*lh+8;
+    const bx=cx+10+bw>W-p.r?cx-bw-10:cx+10,by=p.t+5;
+    x.fillStyle='rgba(22,27,34,0.92)';x.strokeStyle='#30363d';x.lineWidth=1;
+    x.beginPath();x.roundRect(bx,by,bw,bh,4);x.fill();x.stroke();
+    x.fillStyle='#e6edf3';x.textAlign='left';
+    lines.forEach((l,i)=>{x.fillStyle=i===0?'#848d97':i===1?'#f47067':i===2?'#58a6ff':'#e6edf3';x.fillText(l,bx+6,by+14+i*lh)});
+  }
+}
+
+// 缓存固定版模型
+let cvFixed=null,lF2=-1,lN2=-1;
+
+function drawModelFixed(){
+  const F=parseFloat($('Fi').value),N=parseFloat($('Ni').value);
+  if(F!==lF2||N!==lN2){cvFixed=computeFixed(F,N);lF2=F;lN2=N}
+  if(!cvFixed)return;
+  const T2=cvFixed.total;
+  const z=zP2,c=z.c,x=z.x,dp=devicePixelRatio||1,rc=z.w.getBoundingClientRect();
+  c.width=rc.width*dp;c.height=rc.height*dp;c.style.width=rc.width+'px';c.style.height=rc.height+'px';x.scale(dp,dp);
+  const W=rc.width,H=rc.height,p={t:18,r:50,b:26,l:52},cw=W-p.l-p.r,ch=H-p.t-p.b;x.clearRect(0,0,W,H);
+  const vL=Math.floor(z.vL),vR=Math.ceil(z.vR);
+  const yMn=Math.min(F,N)-2,yMx=Math.max(F,N)+2;
+  const xO=s=>p.l+((s-vL)/(vR-vL))*cw,yO=v=>p.t+(1-(v-yMn)/(yMx-yMn))*ch;
+  // 步→日期
+  function hd2(s){return new Date(ENTRY.getTime()+s*STEP2*60000)}
+  // CME关闭底色 (直接用主图的isOff保持一致)
+  x.fillStyle='rgba(48,54,61,0.25)';
+  for(let s=vL;s<=vR;s++){if(isOff(s))x.fillRect(xO(s),p.t,cw/(vR-vL),ch)}
+  // 换月线
+  x.strokeStyle='#da363360';x.lineWidth=1;x.setLineDash([4,4]);
+  for(const rd of RD_BN){
+    const rs=(rd.getTime()-ENTRY.getTime())/(STEP2*60000)-0.5;
+    if(rs>=vL&&rs<=vR){x.beginPath();x.moveTo(xO(rs),p.t);x.lineTo(xO(rs),p.t+ch);x.stroke()}
+  }
+  x.setLineDash([]);
+  // F/N 参考
+  x.strokeStyle='#f4706730';x.lineWidth=1;x.setLineDash([2,6]);x.beginPath();x.moveTo(p.l,yO(F));x.lineTo(W-p.r,yO(F));x.stroke();
+  x.strokeStyle='#3fb95030';x.beginPath();x.moveTo(p.l,yO(N));x.lineTo(W-p.r,yO(N));x.stroke();x.setLineDash([]);
+  x.font='9px Consolas';x.fillStyle='#f4706780';x.textAlign='right';x.fillText('F=$'+F.toFixed(1),W-p.r-3,yO(F)-3);
+  x.fillStyle='#3fb95080';x.fillText('N=$'+N.toFixed(1),W-p.r-3,yO(N)+10);
+  // 阶梯线
+  function st(d,cl,lw){x.strokeStyle=cl;x.lineWidth=lw;x.beginPath();for(let s=vL;s<=vR;s++){if(s<0||s>=T2)continue;const x0=xO(s),x1=xO(s+1),y=yO(d[s]);s===vL?x.moveTo(x0,y):x.lineTo(x0,y);x.lineTo(Math.min(x1,W-p.r),y)}x.stroke()}
+  st(cvFixed.oracle,'#f47067',2);
+  st(cvFixed.pfair,'#3fb950',2);
+  // 当前时刻
+  const cur=Math.min(parseInt($('ti').value),T2-1);
+  if(cur>=vL&&cur<=vR){x.strokeStyle='#e6edf3';x.lineWidth=1.5;x.beginPath();x.moveTo(xO(cur),p.t);x.lineTo(xO(cur),p.t+ch);x.stroke();
+    x.fillStyle='#f47067';x.beginPath();x.arc(xO(cur),yO(cvFixed.oracle[cur]),3.5,0,Math.PI*2);x.fill();
+    x.fillStyle='#3fb950';x.beginPath();x.arc(xO(cur),yO(cvFixed.pfair[cur]),3.5,0,Math.PI*2);x.fill();
+    x.font='10px Consolas';x.textAlign='left';
+    x.fillStyle='#f47067';x.fillText('O:$'+cvFixed.oracle[cur].toFixed(2),xO(cur)+8,yO(cvFixed.oracle[cur])-5);
+    x.fillStyle='#3fb950';x.fillText('BN:$'+cvFixed.pfair[cur].toFixed(2),xO(cur)+8,yO(cvFixed.pfair[cur])+12)}
+  // Y轴
+  x.fillStyle='#484f58';x.font='9px Consolas';x.textAlign='right';
+  for(let i=0;i<=6;i++){const v=yMn+(yMx-yMn)*i/6;x.fillText('$'+v.toFixed(1),p.l-4,yO(v)+3);x.strokeStyle='#21262d';x.lineWidth=.5;x.beginPath();x.moveTo(p.l,yO(v));x.lineTo(W-p.r,yO(v));x.stroke()}
+  // X轴
+  x.fillStyle='#484f58';x.textAlign='center';
+  const sRange=vR-vL,ds2=sRange>300?48:sRange>120?24:sRange>48?12:6;
+  for(let s=Math.ceil(vL/ds2)*ds2;s<=vR;s+=ds2){const d=hd2(s);x.fillText(ds2>=24?`${d.getUTCMonth()+1}/${d.getUTCDate()}`:`${d.getUTCDate()}/${d.getUTCHours()}h`,xO(s),H-7)}
+  // 十字线
+  if(crossStep!==null&&crossStep>=vL&&crossStep<=vR&&crossStep>=0&&crossStep<T2){
+    const cs2=crossStep,cx=xO(cs2);
+    x.strokeStyle='#e6edf340';x.lineWidth=1;x.setLineDash([3,3]);x.beginPath();x.moveTo(cx,p.t);x.lineTo(cx,p.t+ch);x.stroke();x.setLineDash([]);
+    const dt=hd2(cs2),ts=`${dt.getUTCMonth()+1}/${dt.getUTCDate()} ${String(dt.getUTCHours()).padStart(2,'0')}:00`;
+    const oV=cvFixed.oracle[cs2],pV=cvFixed.pfair[cs2],bV=cvFixed.basis[cs2];
+    const lines=[ts,`O: $${oV.toFixed(2)}`,`BN: $${pV.toFixed(2)}`,`Basis: $${bV.toFixed(4)}`];
+    x.font='10px Consolas';const lh=14,bw=130,bh=lines.length*lh+8;
+    const bx=cx+10+bw>W-p.r?cx-bw-10:cx+10,by=p.t+5;
+    x.fillStyle='rgba(22,27,34,0.92)';x.strokeStyle='#30363d';x.lineWidth=1;
+    x.beginPath();x.roundRect(bx,by,bw,bh,4);x.fill();x.stroke();
+    x.textAlign='left';
+    lines.forEach((l,i)=>{x.fillStyle=i===0?'#848d97':i===1?'#f47067':i===2?'#3fb950':'#d29922';x.fillText(l,bx+6,by+14+i*lh)});
+  }
+}
+
+
+function drawBasis(){
+  if(!cv)return;
+  const z=zB,c=z.c,x=z.x,dp=devicePixelRatio||1,rc=z.w.getBoundingClientRect();
+  c.width=rc.width*dp;c.height=rc.height*dp;c.style.width=rc.width+'px';c.style.height=rc.height+'px';x.scale(dp,dp);
+  const W=rc.width,H=rc.height,p={t:8,r:50,b:26,l:52},cw=W-p.l-p.r,ch=H-p.t-p.b;x.clearRect(0,0,W,H);
+  const vL=Math.floor(z.vL),vR=Math.ceil(z.vR);
+  let bMn=0,bMx=0;for(let h=Math.max(0,vL);h<=Math.min(TH-1,vR);h++){bMn=Math.min(bMn,cv.basis[h]);bMx=Math.max(bMx,cv.basis[h])}
+  const bp=Math.max(0.2,(bMx-bMn)*.15),yMn=bMn-bp,yMx=bMx+bp;
+  const xO=h=>p.l+((h-vL)/(vR-vL))*cw,yO=v=>p.t+(1-(v-yMn)/(yMx-yMn))*ch;
+  x.fillStyle='rgba(48,54,61,0.25)';for(let h=vL;h<=vR;h++){if(isOff(h))x.fillRect(xO(h),p.t,cw/(vR-vL),ch)}
+  if(yMn<0&&yMx>0){x.strokeStyle='#484f58';x.lineWidth=.5;x.beginPath();x.moveTo(p.l,yO(0));x.lineTo(W-p.r,yO(0));x.stroke()}
+  x.strokeStyle='#da363360';x.setLineDash([4,4]);for(const r of RH_LINE){if(r>=vL&&r<=vR){x.beginPath();x.moveTo(xO(r),p.t);x.lineTo(xO(r),p.t+ch);x.stroke()}}x.setLineDash([]);
+  x.fillStyle='rgba(210,153,34,0.15)';x.beginPath();x.moveTo(xO(Math.max(0,vL)),yO(0));
+  for(let h=Math.max(0,vL);h<=Math.min(TH-1,vR);h++){x.lineTo(xO(h),yO(cv.basis[h]));x.lineTo(xO(h+1),yO(cv.basis[h]))}
+  x.lineTo(xO(Math.min(TH-1,vR)),yO(0));x.closePath();x.fill();
+  x.strokeStyle='#d29922';x.lineWidth=1.5;x.beginPath();
+  for(let h=Math.max(0,vL);h<=Math.min(TH-1,vR);h++){const x0=xO(h),x1=xO(h+1),y=yO(cv.basis[h]);h===Math.max(0,vL)?x.moveTo(x0,y):x.lineTo(x0,y);x.lineTo(x1,y)}x.stroke();
+  const cur=Math.min(parseInt($('ti').value),TH-1);
+  if(cur>=vL&&cur<=vR){x.strokeStyle='#e6edf3';x.lineWidth=1.5;x.beginPath();x.moveTo(xO(cur),p.t);x.lineTo(xO(cur),p.t+ch);x.stroke();
+    x.fillStyle='#d29922';x.beginPath();x.arc(xO(cur),yO(cv.basis[cur]),3.5,0,Math.PI*2);x.fill();
+    x.font='10px Consolas';x.textAlign='left';
+    x.fillText('$'+cv.basis[cur].toFixed(4)+' ('+( cv.basis[cur]/cv.oracle[cur]*100).toFixed(2)+'%)',xO(cur)+8,yO(cv.basis[cur])-5)}
+  x.fillStyle='#484f58';x.font='9px Consolas';x.textAlign='right';for(let i=0;i<=4;i++){const v=yMn+(yMx-yMn)*i/4;x.fillText('$'+v.toFixed(2),p.l-4,yO(v)+3)}
+  x.textAlign='center';const hr=vR-vL,ds=hr>300?48:hr>120?24:hr>48?12:6;
+  for(let h=Math.ceil(vL/ds)*ds;h<=vR;h+=ds){const d=hd(h);x.fillText(ds>=24?`${d.getUTCMonth()+1}/${d.getUTCDate()}`:`${d.getUTCDate()}/${String(d.getUTCHours()).padStart(2,'0')}h`,xO(h),H-7)}
+  // 十字线
+  if(crossStep!==null&&crossStep>=vL&&crossStep<=vR&&crossStep>=0&&crossStep<TH){
+    const cs=crossStep,cx=xO(cs);
+    x.strokeStyle='#e6edf340';x.lineWidth=1;x.setLineDash([3,3]);x.beginPath();x.moveTo(cx,p.t);x.lineTo(cx,p.t+ch);x.stroke();x.setLineDash([]);
+    const bV=cv.basis[cs],oV=cv.oracle[cs],pct=(bV/oV*100);
+    x.fillStyle='#d29922';x.beginPath();x.arc(cx,yO(bV),4,0,Math.PI*2);x.fill();
+    x.font='10px Consolas';x.textAlign='left';x.fillText('$'+bV.toFixed(4)+' ('+pct.toFixed(2)+'%)',cx+8,yO(bV)-5);
+  }
+}
+
+function drawDelta(){
+  if(!cv)return;
+  const z=zD,c=z.c,x=z.x,dp=devicePixelRatio||1,rc=z.w.getBoundingClientRect();
+  c.width=rc.width*dp;c.height=rc.height*dp;c.style.width=rc.width+'px';c.style.height=rc.height+'px';x.scale(dp,dp);
+  const W=rc.width,H=rc.height,p={t:8,r:50,b:26,l:52},cw=W-p.l-p.r,ch=H-p.t-p.b;x.clearRect(0,0,W,H);
+  const vL=Math.floor(z.vL),vR=Math.ceil(z.vR);
+  const F=parseFloat($('Fi').value),N=parseFloat($('Ni').value);
+
+  // 计算每个步的 delta (用差分, 但只需算一次缓存)
+  if(!cv._deltaF){
+    // 异步计算 delta, 不阻塞渲染
+    cv._deltaF=new Float64Array(TH);cv._deltaN=new Float64Array(TH);
+    // 先用 w 近似显示
+    for(let h=0;h<TH;h++){cv._deltaF[h]=gw(h)*100;cv._deltaN[h]=(1-gw(h))*100}
+    // 后台精确计算
+    setTimeout(()=>{
+      const F=parseFloat($('Fi').value),N=parseFloat($('Ni').value),bump=0.01;
+      const rFu=compute(F+bump,N),rFd=compute(F-bump,N);
+      const rNu=compute(F,N+bump),rNd=compute(F,N-bump);
+      for(let h=0;h<TH;h++){
+        cv._deltaF[h]=(rFu.pfair[h]-rFd.pfair[h])/(2*bump)*100;
+        cv._deltaN[h]=(rNu.pfair[h]-rNd.pfair[h])/(2*bump)*100;
+      }
+      drawDelta();
+    },100);
+  }
+
+  const yMn=0,yMx=100;
+  const xO=h=>p.l+((h-vL)/(vR-vL))*cw,yO=v=>p.t+(1-(v-yMn)/(yMx-yMn))*ch;
+
+  // CME关闭底色
+  x.fillStyle='rgba(48,54,61,0.25)';for(let h=vL;h<=vR;h++){if(!isExt(h))x.fillRect(xO(h),p.t,cw/(vR-vL),ch)}
+  // 换月线
+  x.strokeStyle='#da363360';x.lineWidth=1;x.setLineDash([4,4]);
+  for(const r of RH_LINE){if(r>=vL&&r<=vR){x.beginPath();x.moveTo(xO(r),p.t);x.lineTo(xO(r),p.t+ch);x.stroke()}}
+  x.setLineDash([]);
+  // 50%参考线
+  x.strokeStyle='#30363d';x.lineWidth=0.5;x.beginPath();x.moveTo(p.l,yO(50));x.lineTo(W-p.r,yO(50));x.stroke();
+
+  // 面积填充
+  x.fillStyle='rgba(244,112,103,0.15)';x.beginPath();x.moveTo(xO(Math.max(0,vL)),yO(0));
+  for(let h=Math.max(0,vL);h<=Math.min(TH-1,vR);h++){x.lineTo(xO(h),yO(cv._deltaF[h]));x.lineTo(xO(h+1),yO(cv._deltaF[h]))}
+  x.lineTo(xO(Math.min(TH-1,vR)),yO(0));x.closePath();x.fill();
+
+  x.fillStyle='rgba(88,166,255,0.15)';x.beginPath();x.moveTo(xO(Math.max(0,vL)),yO(100));
+  for(let h=Math.max(0,vL);h<=Math.min(TH-1,vR);h++){x.lineTo(xO(h),yO(cv._deltaF[h]));x.lineTo(xO(h+1),yO(cv._deltaF[h]))}
+  x.lineTo(xO(Math.min(TH-1,vR)),yO(100));x.closePath();x.fill();
+
+  // 线
+  function st(d,cl,lw){x.strokeStyle=cl;x.lineWidth=lw;x.beginPath();for(let h=Math.max(0,vL);h<=Math.min(TH-1,vR);h++){const x0=xO(h),x1=xO(h+1),y=yO(d[h]);h===Math.max(0,vL)?x.moveTo(x0,y):x.lineTo(x0,y);x.lineTo(Math.min(x1,W-p.r),y)}x.stroke()}
+  st(cv._deltaF,'#f47067',2);
+  st(cv._deltaN,'#58a6ff',2);
+
+  // 当前时刻
+  const cur=Math.min(parseInt($('ti').value),TH-1);
+  if(cur>=vL&&cur<=vR){
+    x.strokeStyle='#e6edf3';x.lineWidth=1.5;x.beginPath();x.moveTo(xO(cur),p.t);x.lineTo(xO(cur),p.t+ch);x.stroke();
+    x.fillStyle='#f47067';x.beginPath();x.arc(xO(cur),yO(cv._deltaF[cur]),3.5,0,Math.PI*2);x.fill();
+    x.fillStyle='#58a6ff';x.beginPath();x.arc(xO(cur),yO(cv._deltaN[cur]),3.5,0,Math.PI*2);x.fill();
+    // 标注百分比
+    x.font='10px Consolas';x.fillStyle='#f47067';x.textAlign='left';
+    x.fillText('F:'+cv._deltaF[cur].toFixed(0)+'%',xO(cur)+8,yO(cv._deltaF[cur])-5);
+    x.fillStyle='#58a6ff';
+    x.fillText('N:'+cv._deltaN[cur].toFixed(0)+'%',xO(cur)+8,yO(cv._deltaN[cur])+12);
+  }
+
+  // Y轴
+  x.fillStyle='#484f58';x.font='9px Consolas';
+  for(let v=0;v<=100;v+=25){const y=yO(v);
+    x.textAlign='right';x.fillText(v+'%',p.l-4,y+3);
+    x.textAlign='left';x.fillText(v+'%',W-p.r+4,y+3);
+    x.strokeStyle='#21262d';x.lineWidth=0.5;x.beginPath();x.moveTo(p.l,y);x.lineTo(W-p.r,y);x.stroke()}
+  // X轴
+  x.fillStyle='#484f58';x.textAlign='center';const hr=vR-vL,ds=hr>300?48:hr>120?24:hr>48?12:6;
+  for(let h=Math.ceil(vL/ds)*ds;h<=vR;h+=ds){const d=hd(h);x.fillText(ds>=24?`${d.getUTCMonth()+1}/${d.getUTCDate()}`:`${d.getUTCDate()}/${String(d.getUTCHours()).padStart(2,'0')}h`,xO(h),H-7)}
+  // 十字线
+  if(crossStep!==null&&crossStep>=vL&&crossStep<=vR&&crossStep>=0&&crossStep<TH&&cv._deltaF){
+    const cs=crossStep,cx=xO(cs);
+    x.strokeStyle='#e6edf340';x.lineWidth=1;x.setLineDash([3,3]);x.beginPath();x.moveTo(cx,p.t);x.lineTo(cx,p.t+ch);x.stroke();x.setLineDash([]);
+    x.fillStyle='#f47067';x.beginPath();x.arc(cx,yO(cv._deltaF[cs]),4,0,Math.PI*2);x.fill();
+    x.fillStyle='#58a6ff';x.beginPath();x.arc(cx,yO(cv._deltaN[cs]),4,0,Math.PI*2);x.fill();
+    x.font='10px Consolas';x.textAlign='left';
+    x.fillStyle='#f47067';x.fillText('F:'+cv._deltaF[cs].toFixed(1)+'%',cx+8,yO(cv._deltaF[cs])-5);
+    x.fillStyle='#58a6ff';x.fillText('N:'+cv._deltaN[cs].toFixed(1)+'%',cx+8,yO(cv._deltaN[cs])+12);
+  }
+}
+
+// ================================================================
+// 历史实时图表 (带缩放)
+// ================================================================
+const hist={epoch:[],ts:[],mP:[],aP:[],dev:[],mAPR:[],aAPR:[],borosAPR:[]};
+const MAX_H=100000;
+
+class LZ{
+  constructor(ci,wi){this.c=document.getElementById(ci);this.w=document.getElementById(wi);this.x=this.c.getContext('2d');this.frac_l=0;this.frac_r=1;this.af=true;this.dr=false;this.dx=0;this.dl=0;this.dr2=0;
+    this.c.style.cursor='grab';
+    this.c.addEventListener('wheel',e=>{e.preventDefault();const rc=this.c.getBoundingClientRect(),f=(e.clientX-rc.left)/rc.width,rng=this.frac_r-this.frac_l,z=e.deltaY>0?1.15:1/1.15;
+      const n=hist.ts.length||1;let nr=Math.max(10/n,Math.min(1,rng*z)),cn=this.frac_l+rng*f;this.frac_l=Math.max(0,cn-nr*f);this.frac_r=Math.min(1,this.frac_l+nr);if(this.frac_l<0){this.frac_l=0;this.frac_r=nr}this.af=(this.frac_r>=0.99);drawHist()},{passive:false});
+    this.c.addEventListener('mousedown',e=>{this.dr=true;this.dx=e.clientX;this.dl=this.frac_l;this.dr2=this.frac_r;this.c.style.cursor='grabbing'});
+    window.addEventListener('mousemove',e=>{if(!this.dr)return;const rc=this.c.getBoundingClientRect(),dx=e.clientX-this.dx,rng=this.dr2-this.dl,s=-dx/rc.width*rng;
+      let nL=this.dl+s,nR=nL+rng;if(nL<0){nL=0;nR=rng}if(nR>1){nR=1;nL=1-rng}this.frac_l=nL;this.frac_r=nR;this.af=(this.frac_r>=0.99);drawHist()});
+    window.addEventListener('mouseup',()=>{this.dr=false;this.c.style.cursor='grab'});
+    this.c.addEventListener('dblclick',()=>{this.frac_l=0;this.frac_r=1;this.af=true;drawHist()});
+  }
+  sync(o){this.frac_l=o.frac_l;this.frac_r=o.frac_r;this.af=o.af}
+}
+const lz1=new LZ('h1c','h1w'),lz2=new LZ('h2c','h2w'),lz3=new LZ('h3c','h3w'),lz4=new LZ('h4c','h4w'),lz5=new LZ('h5c','h5w');
+const lzSync=[lz1,lz2,lz3,lz4]; // 前4个联动
+// 同步前4个
+for(const lz of lzSync){
+  lz.c.addEventListener('wheel',()=>{for(const o of lzSync)if(o!==lz)o.sync(lz)},{passive:true});
+  lz.c.addEventListener('mousemove',()=>{if(lz.dr)for(const o of lzSync)if(o!==lz)o.sync(lz)});
+  lz.c.addEventListener('dblclick',()=>{for(const o of lzSync){o.frac_l=0;o.frac_r=1;o.af=true}});
+}
+// lz5 (Boros) 独立, 不联动
+
+function drawLC(lz,series,colors,yFmt,epochOffset){
+  // epochOffset: 每个 series 的时间偏移 (秒), 默认 0
+  epochOffset=epochOffset||0;
+  const c=lz.c,x=lz.x,dp=devicePixelRatio||1,rc=lz.w.getBoundingClientRect();
+  c.width=rc.width*dp;c.height=rc.height*dp;c.style.width=rc.width+'px';c.style.height=rc.height+'px';x.scale(dp,dp);
+  const W=rc.width,H=rc.height,p={t:12,r:55,b:22,l:60},cw=W-p.l-p.r,ch=H-p.t-p.b;x.clearRect(0,0,W,H);
+  const n=hist.epoch.length;if(n<2)return;
+
+  // 时间范围 (用 epoch 做 x 轴)
+  const tAll0=hist.epoch[0], tAll1=hist.epoch[n-1];
+  if(lz.af){const rng=lz.frac_r-lz.frac_l;lz.frac_r=1;lz.frac_l=1-rng;if(lz.frac_l<0)lz.frac_l=0}
+  const tL=tAll0+(tAll1-tAll0)*lz.frac_l, tR=tAll0+(tAll1-tAll0)*lz.frac_r;
+  if(tR<=tL)return;
+
+  const xO=t=>p.l+((t-tL)/(tR-tL))*cw;
+
+  // Y 范围 (只看可见时间段)
+  let yMn=Infinity,yMx=-Infinity;
+  for(const s of series)for(let i=0;i<n;i++){
+    if(hist.epoch[i]<tL||hist.epoch[i]>tR)continue;
+    if(s[i]!==null&&s[i]!==undefined){yMn=Math.min(yMn,s[i]);yMx=Math.max(yMx,s[i])}
+  }
+  if(!isFinite(yMn))return;const yP=Math.max(0.1,(yMx-yMn)*.12);yMn-=yP;yMx+=yP;
+  const yO=v=>p.t+(1-(v-yMn)/(yMx-yMn))*ch;
+
+  // CME 关闭底色 (直接用 UTC 时间判断, 不依赖步长)
+  x.fillStyle='rgba(48,54,61,0.25)';
+  for(let t=Math.floor(tL/3600)*3600;t<=tR;t+=3600){
+    const d=new Date(t*1000);
+    const wd=d.getUTCDay(),hr=d.getUTCHours();
+    let closed=false;
+    if(wd===6) closed=true;
+    else if(wd===0) closed=(hr<22);
+    else if(wd===5) closed=(hr>=21);
+    else closed=(hr>=21&&hr<22);
+    if(closed){
+      const x0=Math.max(p.l,xO(t)),x1=Math.min(p.l+cw,xO(t+3600));
+      if(x1>x0) x.fillRect(x0,p.t,x1-x0,ch);
+    }
+  }
+
+  // 换月事件线 (直接用 RD 的 epoch)
+  x.strokeStyle='#da363360';x.lineWidth=1;x.setLineDash([4,4]);
+  for(const rd of RD){
+    const rEpoch=rd.getTime()/1000-1800; // 21:30 = 22:00 - 30min
+    if(rEpoch>=tL&&rEpoch<=tR){
+      x.beginPath();x.moveTo(xO(rEpoch),p.t);x.lineTo(xO(rEpoch),p.t+ch);x.stroke();
+    }
+  }
+  x.setLineDash([]);
+
+  // Y 网格 + 左右标签
+  x.strokeStyle='#21262d';x.lineWidth=.5;x.fillStyle='#484f58';x.font='9px Consolas';
+  for(let i=0;i<=4;i++){const v=yMn+(yMx-yMn)*i/4,y=yO(v);x.beginPath();x.moveTo(p.l,y);x.lineTo(W-p.r,y);x.stroke();
+    x.textAlign='right';x.fillText(yFmt(v),p.l-4,y+3);
+    x.textAlign='left';x.fillText(yFmt(v),W-p.r+4,y+3)}
+
+  // 零线
+  if(yMn<0&&yMx>0){x.strokeStyle='#484f58';x.lineWidth=1;x.beginPath();x.moveTo(p.l,yO(0));x.lineTo(W-p.r,yO(0));x.stroke()}
+
+  // 数据线 (多了就降采样)
+  // 算可见区域内的点数
+  let visCount=0;
+  for(let i=0;i<n;i++){if(hist.epoch[i]>=tL&&hist.epoch[i]<=tR)visCount++}
+  const maxPx=cw*2; // 最多画 2*像素宽 个点
+  const skip=visCount>maxPx?Math.ceil(visCount/maxPx):1;
+
+  series.forEach((s,si)=>{x.strokeStyle=colors[si];x.lineWidth=1.5;x.beginPath();let wasNull=true;let cnt=0;let prevEp=0;
+    for(let i=0;i<n;i++){
+      const et=hist.epoch[i]+epochOffset;
+      if(et<tL||et>tR)continue;
+      if(skip>1&&(cnt++%skip)!==0)continue;
+      if(s[i]===null||s[i]===undefined){wasNull=true;continue}
+      // 时间间隔过大断线 (用可见区间/点数的3倍作为阈值)
+      const gapThresh=Math.max(60,(tR-tL)/Math.max(1,visCount)*3);
+      if(prevEp>0&&(et-prevEp)>gapThresh) wasNull=true;
+      const xx=xO(et),y=yO(s[i]);
+      wasNull?x.moveTo(xx,y):x.lineTo(xx,y);
+      wasNull=false;prevEp=et;
+    }x.stroke()});
+
+  // X 轴时间标签
+  x.fillStyle='#484f58';x.font='9px Consolas';x.textAlign='center';
+  const span=tR-tL;
+  const labelStep=span>86400*3?86400:span>86400?3600*6:span>3600*6?3600:span>3600?600:120;
+  for(let t=Math.ceil(tL/labelStep)*labelStep;t<=tR;t+=labelStep){
+    const d=new Date(t*1000);
+    let label;
+    if(labelStep>=86400) label=`${d.getUTCMonth()+1}/${d.getUTCDate()}`;
+    else if(labelStep>=3600) label=`${d.getUTCDate()}/${String(d.getUTCHours()).padStart(2,'0')}h`;
+    else label=`${String(d.getUTCHours()).padStart(2,'0')}:${String(d.getUTCMinutes()).padStart(2,'0')}`;
+    x.fillText(label,xO(t),H-6);
+  }
+}
+
+function drawHist(){
+  drawLC(lz1,[hist.mP,hist.aP],['#58a6ff','#3fb950'],v=>'$'+v.toFixed(2));
+  drawLC(lz2,[hist.dev],['#d29922'],v=>(v>=0?'+':'')+v.toFixed(3)+'%');
+  drawLC(lz3,[hist.mAPR],['#a371f7'],v=>v.toFixed(0)+'%');
+  drawLC(lz4,[hist.aAPR],['#3fb950'],v=>v.toFixed(0)+'%',-3600);
+  drawLC(lz5,[hist.borosAPR],['#f0883e'],v=>v.toFixed(0)+'%');
+}
+
+// ================================================================
+// 主逻辑
+// ================================================================
+const $=id=>document.getElementById(id);
+let cv=null,lF=-1,lN=-1;
+
+function ren(){
+  const F=parseFloat($('Fi').value),N=parseFloat($('Ni').value),h=Math.min(parseInt($('ti').value),TH-1);
+  if(F!==lF||N!==lN){cv=compute(F,N);cvFixed=computeFixed(F,N);lF=F;lN=N;lF2=F;lN2=N}
+  const w=gw(h),O=cv.oracle[h],b=cv.basis[h],P=cv.pfair[h],S=F-N,fr=cv.frate[h];
+  const Pbn=cvFixed&&h<cvFixed.total?cvFixed.pfair[h]:P;
+  $('vP').textContent='$'+P.toFixed(2);
+  $('vPbn').textContent='$'+Pbn.toFixed(2);
+  $('vO').textContent='$'+O.toFixed(2);
+  $('vB').textContent=(b>=0?'+':'')+b.toFixed(4);
+  $('vBp').textContent=(b/O*100).toFixed(3)+'%';
+  $('vS').textContent='$'+S.toFixed(2);
+  $('vW').textContent=w.toFixed(2);
+  $('vD').textContent='$'+(0.2*S).toFixed(2);
+  $('vR').textContent=RH.filter(r=>r>h).length+'次';
+  $('vFR').textContent=(fr*100).toFixed(5)+'%';
+  $('vFA').textContent=(fr*24*365*100).toFixed(1)+'%';
+  $('td').textContent=fmt(h)+`  (h=${h})`;
+  ['rd1','rd2','rd3','rd4','rd5'].forEach((id,i)=>{$(id).className=h>=RH[i]?'passed':(h>=(i>0?RH[i-1]:0)&&h<RH[i]?'active':'')});
+  modelRedraw();
+}
+
+function sy(a,b){b.value=a.value}
+$('Fs').oninput=()=>{sy($('Fs'),$('Fi'));ren()};$('Fi').oninput=()=>{sy($('Fi'),$('Fs'));ren()};
+$('Ns').oninput=()=>{sy($('Ns'),$('Ni'));ren()};$('Ni').oninput=()=>{sy($('Ni'),$('Ns'));ren()};
+$('ts').oninput=()=>{sy($('ts'),$('ti'));ren()};$('ti').oninput=()=>{sy($('ti'),$('ts'));ren()};
+window.addEventListener('resize',()=>{ren();drawHist()});
+ren();
+setInterval(()=>{const d=new Date();$('utcClock').textContent=d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0')+'-'+String(d.getUTCDate()).padStart(2,'0')+' '+String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0')+':'+String(d.getUTCSeconds()).padStart(2,'0')+' UTC'},1000);
+
+// ================================================================
+// 实时模式
+// ================================================================
+let liveOn=false,liveTimer=null;
+const ENTRY_MS=ENTRY.getTime();
+function curH(){return Math.max(0,Math.min(Math.floor((Date.now()-ENTRY_MS)/(STEP_MIN*60000)),TH-1))}
+
+async function loadHist(){
+  try{
+    const r=await fetch('http://localhost:5111/api/history?n=3000');
+    const rows=await r.json();
+    hist.epoch.length=0;hist.ts.length=0;hist.mP.length=0;hist.aP.length=0;hist.dev.length=0;hist.mAPR.length=0;hist.aAPR.length=0;hist.borosAPR.length=0;
+    for(const d of rows){
+      const ep=d.timestamp_utc?new Date(d.timestamp_utc+'Z').getTime()/1000:0;
+      hist.epoch.push(ep);
+      hist.ts.push(d.timestamp_utc?d.timestamp_utc.split(' ')[1]||'':'');
+      hist.mP.push(d.model_price);
+      hist.aP.push(d.hl_mid);
+      hist.dev.push(d.deviation_pct);
+      hist.mAPR.push(d.model_FR_apr);
+      hist.aAPR.push(d.hl_FR_apr);
+      hist.borosAPR.push(d.boros_avg_fr_apr);
+    }
+    drawHist();
+    $('liveStatus').textContent=`已加载 ${rows.length} 条`;
+  }catch(e){$('liveStatus').textContent='加载失败 - 先运行 python recorder.py'}
+}
+
+async function liveTick(){
+  try{
+    const r=await fetch('http://localhost:5111/api/prices');
+    const d=await r.json();
+    if(!d.F){$('liveStatus').textContent='无数据';return}
+
+    // 更新滑块 (让 ren 重算模型)
+    $('Fi').value=d.F.toFixed(2);$('Fs').value=d.F.toFixed(2);
+    $('Ni').value=d.N.toFixed(2);$('Ns').value=d.N.toFixed(2);
+    const h=curH();$('ti').value=h;$('ts').value=h;
+    ren(); // 这会重算模型 + 重绘上面的图
+
+    const P0=cv.pfair[h],P1=cv.pfair[Math.min(h+SPH,TH-1)];
+    const mfr=cv.frate[h],mapr=mfr*24*365*100;
+
+    // 实时面板
+    $('lvF').textContent='$'+d.F.toFixed(2)+' ('+d.F_bid.toFixed(2)+'/'+d.F_ask.toFixed(2)+')';
+    $('lvN').textContent='$'+d.N.toFixed(2)+' ('+d.N_bid.toFixed(2)+'/'+d.N_ask.toFixed(2)+')';
+    $('lvS').textContent='$'+d.S.toFixed(2);
+    $('lvSp').textContent=(d.S/d.oracle*100).toFixed(2)+'%';
+    $('lvHL').textContent=d.hl_mid!=null?'$'+d.hl_mid.toFixed(2):'—';
+    $('lvP0').textContent='$'+P0.toFixed(2);
+    $('lvP1').textContent='$'+P1.toFixed(2);
+    $('lvFR').textContent=d.hl_FR_apr!=null?d.hl_FR_apr.toFixed(1)+'%':'—';
+
+    if(d.hl_mid!=null){
+      const dev=d.hl_mid-P0,devP=dev/P0*100;
+      $('lvDev').textContent=(dev>=0?'+':'')+'$'+dev.toFixed(2)+' ('+devP.toFixed(3)+'%)';
+      $('lvDev').style.color=Math.abs(dev)<0.5?'#3fb950':'#d29922';
+    }
+
+    // Boros
+    $('lvBorosHrs').textContent=d.boros_hours_left!=null?d.boros_hours_left.toFixed(1)+'h':'—';
+    $('lvBorosCum').textContent=d.boros_cum_fr!=null?d.boros_cum_fr.toFixed(4)+'%':'—';
+    $('lvBorosAPR').textContent=d.boros_avg_fr_apr!=null?d.boros_avg_fr_apr.toFixed(1)+'%':'—';
+
+    // 时间戳 (取两源中较新的)
+    const now=Date.now()/1000;
+    const dataTs=Math.max(d.ib_data_ts||0,d.hl_data_ts||0);
+    if(dataTs>0){
+      const dt=new Date(dataTs*1000);
+      $('lvTS').textContent=dt.getUTCHours().toString().padStart(2,'0')+':'+dt.getUTCMinutes().toString().padStart(2,'0')+':'+dt.getUTCSeconds().toString().padStart(2,'0')+' UTC';
+      const lag=now-dataTs;
+      $('lvLag').textContent=lag.toFixed(1)+'s';
+      $('lvLag').style.color=lag>10?'#f47067':'#3fb950';
+    }
+
+    // 追加历史
+    const ts=new Date().toISOString().substr(11,8);
+    const devP=d.deviation_pct;
+    const aAPR=d.hl_FR_apr;
+    hist.epoch.push(Date.now()/1000);hist.ts.push(ts);hist.mP.push(P0);hist.aP.push(d.hl_mid);hist.dev.push(devP);hist.mAPR.push(mapr);hist.aAPR.push(aAPR);hist.borosAPR.push(d.boros_avg_fr_apr);
+    while(hist.ts.length>MAX_H){hist.epoch.shift();hist.ts.shift();hist.mP.shift();hist.aP.shift();hist.dev.shift();hist.mAPR.shift();hist.aAPR.shift();hist.borosAPR.shift()}
+    drawHist();
+
+    $('liveStatus').textContent='';
+  }catch(e){$('liveStatus').textContent='连接失败'}
+}
+
+$('liveBtn').onclick=async function(){
+  liveOn=!liveOn;
+  if(liveOn){
+    this.textContent='■ 停止';this.style.background='#da3633';
+    $('livePanel').style.display='block';$('hsec').style.display='block';
+    await loadHist();
+    liveTick();
+    liveTimer=setInterval(liveTick,3000);
+  }else{
+    this.textContent='▶ 实时模式';this.style.background='#238636';
+    $('livePanel').style.display='none';$('hsec').style.display='none';
+    clearInterval(liveTimer);
+  }
+};
+
+</script>
+</body>
+</html>

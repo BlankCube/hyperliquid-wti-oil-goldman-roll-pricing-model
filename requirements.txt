@@ -1,0 +1,8 @@
+numpy
+ib_insync
+flask
+flask-cors
+python-dotenv
+websockets
+aiohttp
+requests
