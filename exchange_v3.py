@@ -198,6 +198,7 @@ def main():
     entry = datetime(2026, 4, 25, 0, 0)
     exit_ = datetime(2026, 5, 19, 0, 0)
     rolls = [
+        # docs.trade.xyz: BD 5–9 of the month (was BD 6–10, off by 1 day)
         datetime(2026, 5, 7, 22, 0),
         datetime(2026, 5, 8, 22, 0),
         datetime(2026, 5, 11, 22, 0),
