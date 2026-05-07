@@ -37,11 +37,11 @@ BETA = np.exp(-STEP_MINUTES / 30)  # Oracle EMA: τ=30min (trade.xyz WTI), 60min
 DEFAULT_ENTRY = datetime(2026, 5, 1, 0, 0)
 DEFAULT_EXIT = datetime(2026, 5, 19, 0, 0)
 DEFAULT_ROLLS = [
+    datetime(2026, 5, 7, 22, 0),
     datetime(2026, 5, 8, 22, 0),
     datetime(2026, 5, 11, 22, 0),
     datetime(2026, 5, 12, 22, 0),
     datetime(2026, 5, 13, 22, 0),
-    datetime(2026, 5, 14, 22, 0),
 ]
 
 

@@ -198,11 +198,11 @@ def main():
     entry = datetime(2026, 4, 25, 0, 0)
     exit_ = datetime(2026, 5, 19, 0, 0)
     rolls = [
+        datetime(2026, 5, 7, 22, 0),
         datetime(2026, 5, 8, 22, 0),
         datetime(2026, 5, 11, 22, 0),
         datetime(2026, 5, 12, 22, 0),
         datetime(2026, 5, 13, 22, 0),
-        datetime(2026, 5, 14, 22, 0),
     ]
 
     r = solve(F, N, entry, exit_, rolls)
