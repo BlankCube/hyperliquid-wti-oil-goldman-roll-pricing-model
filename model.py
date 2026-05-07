@@ -10,7 +10,7 @@ WTI 永续合约第一性原理定价模型
   2. FR = 0.5 * [P + clamp(r-P, ±0.0005)] / 8   (XYZ 0.5x)
   3. E[PnL_hedged] = 0
 
-CME 关闭时 Oracle 通过 EMA 追踪永续合约 (τ=1hr)
+CME 关闭时 Oracle 通过 EMA 追踪永续合约 (τ=30min, trade.xyz WTI)
 迭代反向归纳求解, 无套利验证通过 (12000+ 组合, 最大误差 < $0.000005)
 
 用法:
@@ -31,7 +31,7 @@ STEPS_PER_HOUR = 60 // STEP_MINUTES  # 1
 
 INTEREST = 0.0001  # 0.01% per 8h (基础利率)
 FR_CAP = 0.04      # ±4%/hr (funding rate 上限)
-BETA = np.exp(-STEP_MINUTES / 60)  # Oracle EMA: τ=1hr, 10分钟步长 → exp(-1/6)≈0.846
+BETA = np.exp(-STEP_MINUTES / 30)  # Oracle EMA: τ=30min (trade.xyz WTI), 60min步 → exp(-2)≈0.135
 
 # 默认换月时间表: 2026年5月 CLM6→CLN6
 DEFAULT_ENTRY = datetime(2026, 5, 1, 0, 0)

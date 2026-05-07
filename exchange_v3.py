@@ -5,7 +5,7 @@ Hyperliquid WTI 永续合约交易所模拟器 v3
 只有一个 Oracle, 一个基差, 一个 funding.
 
 External (CME开盘): Oracle = w*F + (1-w)*N
-Internal (CME关):   Oracle = EMA 追踪 perp (τ=1hr)
+Internal (CME关):   Oracle = EMA 追踪 perp (τ=30min)
 
 basis = perp - oracle (唯一定义)
 funding = f(basis, oracle) (永远一致)
@@ -26,7 +26,7 @@ STEP_MINUTES = 60
 STEPS_PER_HOUR = 60 // STEP_MINUTES
 INTEREST = 0.0001  # 0.01% per 8h
 FR_CAP = 0.04
-BETA = np.exp(-STEP_MINUTES / 60)  # EMA: τ=1hr, 10min步 → exp(-1/6)≈0.846
+BETA = np.exp(-STEP_MINUTES / 30)  # EMA: τ=30min (trade.xyz WTI), 60min步 → exp(-2)≈0.135
 
 
 def is_external(dt_utc):

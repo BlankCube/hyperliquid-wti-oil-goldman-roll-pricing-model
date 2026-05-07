@@ -16,7 +16,7 @@ The model solves the resulting system via **iterative backward induction with Ne
 
 - **Live data recording** — IBKR (CME front + next month) + Hyperliquid orderbook websocket, aligned to 3-second ticks, written to `live_log.csv`
 - **Interactive web dashboard** (`pricing_tool.html`) — model curves, basis, delta hedge ratios, live history; scroll-zoom, drag-pan, click crosshair
-- **Hyperliquid XYZ model**: 0.5× funding scaling, hourly settlement, EMA Oracle during CME closure (τ=1h)
+- **Hyperliquid XYZ model**: 0.5× funding scaling, hourly settlement, EMA Oracle during CME closure (τ=30min)
 - **Boros implied APR** — cumulative funding from now to expiry, useful for comparing against [Pendle Boros yield markets](https://boros.pendle.finance/)
 - **Standalone Python model** (`model.py`) — call `solve(F, N, entry, exit, rolls)` to get the full hourly path
 - **No trading code** — read-only dashboard
