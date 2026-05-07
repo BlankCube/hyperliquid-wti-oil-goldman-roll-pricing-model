@@ -120,11 +120,11 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#0d1117;color:#e6edf
 
   <div class="sched"><table>
     <tr><th>事件</th><th>UTC (5:30PM ET)</th><th>w→</th></tr>
-    <tr id="rd1"><td>RD1</td><td>05/08 21:30</td><td>0.80</td></tr>
-    <tr id="rd2"><td>RD2</td><td>05/11 21:30</td><td>0.60</td></tr>
-    <tr id="rd3"><td>RD3</td><td>05/12 21:30</td><td>0.40</td></tr>
-    <tr id="rd4"><td>RD4</td><td>05/13 21:30</td><td>0.20</td></tr>
-    <tr id="rd5"><td>RD5</td><td>05/14 21:30</td><td>0.00</td></tr>
+    <tr id="rd1"><td>RD1</td><td>05/07 21:30</td><td>0.80</td></tr>
+    <tr id="rd2"><td>RD2</td><td>05/08 21:30</td><td>0.60</td></tr>
+    <tr id="rd3"><td>RD3</td><td>05/11 21:30</td><td>0.40</td></tr>
+    <tr id="rd4"><td>RD4</td><td>05/12 21:30</td><td>0.20</td></tr>
+    <tr id="rd5"><td>RD5</td><td>05/13 21:30</td><td>0.00</td></tr>
   </table></div>
 </div>
 
@@ -170,7 +170,7 @@ const STEP_MIN=60,SPH=1; // 60分钟步长, 每小时1步
 const R_INT=0.0001,CAP=0.04,BETA=Math.exp(-STEP_MIN/30); // EMA τ=30min (trade.xyz WTI)
 const ENTRY=new Date(Date.UTC(2026,4,1,0,0)),END=new Date(Date.UTC(2026,4,19,0,0));
 const TH=Math.round((END-ENTRY)/(STEP_MIN*60000))+1;
-const RD=[new Date(Date.UTC(2026,4,8,22,0)),new Date(Date.UTC(2026,4,11,22,0)),new Date(Date.UTC(2026,4,12,22,0)),new Date(Date.UTC(2026,4,13,22,0)),new Date(Date.UTC(2026,4,14,22,0))];
+const RD=[new Date(Date.UTC(2026,4,7,22,0)),new Date(Date.UTC(2026,4,8,22,0)),new Date(Date.UTC(2026,4,11,22,0)),new Date(Date.UTC(2026,4,12,22,0)),new Date(Date.UTC(2026,4,13,22,0))];
 const RH=RD.map(d=>Math.round((d-ENTRY)/(STEP_MIN*60000))),RS=new Set(RH);
 const RH_LINE=RD.map(d=>(d-ENTRY)/(STEP_MIN*60000)-0.5*SPH);
 

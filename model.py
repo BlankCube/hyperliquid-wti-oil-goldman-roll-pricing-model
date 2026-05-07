@@ -49,6 +49,11 @@ DEFAULT_ROLLS = [
     datetime(2026, 5, 11, 22, 0),  # BD 7 (Mon)
     datetime(2026, 5, 12, 22, 0),  # BD 8 (Tue)
     datetime(2026, 5, 13, 22, 0),  # BD 9 (Wed) — final 20%, perp = N
+    datetime(2026, 5, 7, 22, 0),
+    datetime(2026, 5, 8, 22, 0),
+    datetime(2026, 5, 11, 22, 0),
+    datetime(2026, 5, 12, 22, 0),
+    datetime(2026, 5, 13, 22, 0),
 ]
 
 
