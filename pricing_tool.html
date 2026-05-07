@@ -168,7 +168,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#0d1117;color:#e6edf
 // ================================================================
 const STEP_MIN=60,SPH=1; // 60分钟步长, 每小时1步
 const R_INT=0.0001,CAP=0.04,BETA=Math.exp(-STEP_MIN/30); // EMA τ=30min (trade.xyz WTI)
-const ENTRY=new Date(Date.UTC(2026,4,1,0,0)),END=new Date(Date.UTC(2026,4,16,0,0));
+const ENTRY=new Date(Date.UTC(2026,4,1,0,0)),END=new Date(Date.UTC(2026,4,17,0,0));
 const TH=Math.round((END-ENTRY)/(STEP_MIN*60000))+1;
 const RD=[new Date(Date.UTC(2026,4,8,22,0)),new Date(Date.UTC(2026,4,11,22,0)),new Date(Date.UTC(2026,4,12,22,0)),new Date(Date.UTC(2026,4,13,22,0)),new Date(Date.UTC(2026,4,14,22,0))];
 const RH=RD.map(d=>Math.round((d-ENTRY)/(STEP_MIN*60000))),RS=new Set(RH);

@@ -196,7 +196,7 @@ def test_pnl(result, h0, h1):
 def main():
     F, N = 112.06, 97.72
     entry = datetime(2026, 4, 25, 0, 0)
-    exit_ = datetime(2026, 5, 16, 0, 0)
+    exit_ = datetime(2026, 5, 17, 0, 0)
     rolls = [
         datetime(2026, 5, 8, 22, 0),
         datetime(2026, 5, 11, 22, 0),
