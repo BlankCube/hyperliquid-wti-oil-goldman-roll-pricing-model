@@ -45,7 +45,7 @@ HL_COIN = 'xyz:CL'
 
 # 模型时间范围 (覆盖整个换月周期)
 ENTRY = datetime(2026, 5, 1, 0, 0)
-EXIT  = datetime(2026, 5, 17, 0, 0)
+EXIT  = datetime(2026, 5, 19, 0, 0)
 
 # Goldman Roll 5 个交易日 (CME 5:30PM ET → snap 到下一整点 22:00 UTC)
 ROLLS = [

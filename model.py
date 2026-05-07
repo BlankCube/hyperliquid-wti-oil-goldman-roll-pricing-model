@@ -35,7 +35,7 @@ BETA = np.exp(-STEP_MINUTES / 30)  # Oracle EMA: τ=30min (trade.xyz WTI), 60min
 
 # 默认换月时间表: 2026年5月 CLM6→CLN6
 DEFAULT_ENTRY = datetime(2026, 5, 1, 0, 0)
-DEFAULT_EXIT = datetime(2026, 5, 17, 0, 0)
+DEFAULT_EXIT = datetime(2026, 5, 19, 0, 0)
 DEFAULT_ROLLS = [
     datetime(2026, 5, 8, 22, 0),
     datetime(2026, 5, 11, 22, 0),
