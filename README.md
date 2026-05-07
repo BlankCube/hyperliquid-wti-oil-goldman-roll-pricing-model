@@ -16,9 +16,7 @@ The model solves the resulting system via **iterative backward induction with Ne
 
 - **Live data recording** — IBKR (CME front + next month) + Hyperliquid orderbook websocket, aligned to 3-second ticks, written to `live_log.csv`
 - **Interactive web dashboard** (`pricing_tool.html`) — model curves, basis, delta hedge ratios, live history; scroll-zoom, drag-pan, click crosshair
-- **Two model variants**:
-  - **XYZ (Hyperliquid)**: 0.5× funding scaling, hourly settlement, EMA Oracle during CME closure
-  - **BN (Binance commodity perp)**: standard funding (no 0.5×), 4h settlement with ±0.5%/4h cap, EWMA tracking during off-hours (per Binance's [2026-05-08 update](https://www.binance.com/en/support/faq/detail/fe7dcdf24f1943d98b368f5f9f744398))
+- **Hyperliquid XYZ model**: 0.5× funding scaling, hourly settlement, EMA Oracle during CME closure (τ=1h)
 - **Boros implied APR** — cumulative funding from now to expiry, useful for comparing against [Pendle Boros yield markets](https://boros.pendle.finance/)
 - **Standalone Python model** (`model.py`) — call `solve(F, N, entry, exit, rolls)` to get the full hourly path
 - **No trading code** — read-only dashboard
@@ -70,7 +68,7 @@ CL_FRONT_MONTH = '202606'  # CLM26
 CL_NEXT_MONTH  = '202607'  # CLN26
 ```
 
-The Goldman Roll always runs **business days 6–10** of the calendar month at **5:30 PM ET** (snapped to the next UTC hour). Update the same constants in `pricing_tool.html` (`RD`, `RD_BN`, `ENTRY`, `END`).
+The Goldman Roll always runs **business days 6–10** of the calendar month at **5:30 PM ET** (snapped to the next UTC hour). Update the same constants in `pricing_tool.html` (`RD`, `ENTRY`, `END`).
 
 ### 5. Run
 

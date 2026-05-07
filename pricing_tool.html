@@ -94,10 +94,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#0d1117;color:#e6edf
   </div>
 
 
-  <div style="display:flex;gap:8px;margin-bottom:12px">
-    <div class="rbox" style="flex:1;margin-bottom:0"><div class="lb">模型价 P(t)</div><div class="v" id="vP"></div></div>
-    <div class="rbox" style="flex:1;margin-bottom:0"><div class="lb" style="color:#3fb950">BN模型价</div><div class="v" style="color:#3fb950" id="vPbn"></div></div>
-  </div>
+  <div class="rbox"><div class="lb">模型价 P(t)</div><div class="v" id="vP"></div></div>
   <div class="g3">
     <div class="c"><div class="lb">Oracle O(t)</div><div class="v" style="color:#f47067" id="vO"></div></div>
     <div class="c"><div class="lb">基差 b</div><div class="v" style="color:#d29922" id="vB"></div></div>
@@ -136,10 +133,6 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#0d1117;color:#e6edf
   <div class="leg"><span><span class="d" style="background:#f47067"></span>Oracle</span><span><span class="d" style="background:#58a6ff"></span>模型价</span><span><span class="d" style="background:#30363d"></span>CME关</span><span><span class="d" style="background:#da3633;height:1px"></span>换月</span></div>
   <div class="hint">滚轮缩放 · 拖拽平移 · 双击重置</div>
   <div class="cbox" id="pw"><canvas id="pc"></canvas></div>
-
-  <h2>BN模型 (Binance规则, 无0.5×, 休市Oracle固定)</h2>
-  <div class="leg"><span><span class="d" style="background:#f47067"></span>Oracle</span><span><span class="d" style="background:#3fb950"></span>BN模型价</span></div>
-  <div class="cbox" id="pw2"><canvas id="pc2"></canvas></div>
 
   <h2>基差 b(t)</h2>
   <div class="cbox sm" id="bw"><canvas id="bc"></canvas></div>
@@ -190,58 +183,6 @@ function oP(F,N,w){return w*F+(1-w)*N}
 function fp(b,O){if(O<=0)return 0;const P=b/O,c=Math.max(-0.0005,Math.min(0.0005,R_INT-P));return Math.max(-CAP,Math.min(CAP,0.5*(P+c)/8))/SPH*O}
 function frr(b,O){if(O<=0)return 0;const P=b/O,c=Math.max(-0.0005,Math.min(0.0005,R_INT-P));return Math.max(-CAP,Math.min(CAP,0.5*(P+c)/8))}
 
-// BN模型: Binance规则, 1h步长, 4h结算一次funding, 无0.5×缩放, 休市Oracle固定
-const STEP2=60;
-const SPH2=1;
-const TH2=Math.round((END-ENTRY)/(STEP2*60000))+1;
-// BN roll时间: 21:00 UTC; 休市Oracle冻结, 周五roll自然顺延到开盘
-const RD_BN=[new Date(Date.UTC(2026,4,8,22,0)),new Date(Date.UTC(2026,4,11,22,0)),new Date(Date.UTC(2026,4,12,22,0)),new Date(Date.UTC(2026,4,13,22,0)),new Date(Date.UTC(2026,4,14,22,0))];
-const RH_BN=RD_BN.map(d=>Math.round((d-ENTRY)/(STEP2*60000)));
-const BN_CAP_4H=0.005; // ±0.5% per 4h settlement
-// BN funding: 结算在UTC 0,4,8,12,16,20, funding在前一步生效使阶梯对齐结算点
-function isBNSettle(s){const d=new Date(ENTRY.getTime()+s*STEP2*60000);return (d.getUTCHours()+1)%4===0}
-function fp2(b,O,s){if(O<=0||!isBNSettle(s))return 0;const P=b/O,c=Math.max(-0.0005,Math.min(0.0005,R_INT-P));return Math.max(-BN_CAP_4H,Math.min(BN_CAP_4H,(P+c)/2))*O}
-function gw2(s){
-  let passed=0;
-  for(const rh of RH_BN){if(rh<=s)passed++}
-  return Math.max(0,1-0.2*passed);
-}
-
-function computeFixed(F,N){
-  // BN 新规则 (2026-05-08起): 休市Oracle用EMA追踪perp (借用HL参数 τ=1h)
-  const oA=new Float64Array(TH2),bA=new Float64Array(TH2),pA=new Float64Array(TH2);
-  const ef=new Uint8Array(TH2),eO=new Float64Array(TH2);
-  for(let s=0;s<TH2;s++){
-    eO[s]=oP(F,N,gw2(s));
-    const d=new Date(ENTRY.getTime()+s*STEP2*60000),wd=d.getUTCDay(),hr=d.getUTCHours();
-    let ext=true;
-    if(wd===6) ext=false;
-    else if(wd===0) ext=(hr>=22);
-    else if(wd===5) ext=(hr<21);
-    else ext=!(hr>=21&&hr<22);
-    ef[s]=ext?1:0;
-  }
-  // 迭代收敛: oracle在休市时依赖perp (循环), 用迭代解
-  let perp=new Float64Array(TH2);for(let s=0;s<TH2;s++)perp[s]=eO[s];
-  for(let iter=0;iter<30;iter++){
-    oA[0]=eO[0];
-    for(let s=1;s<TH2;s++){if(ef[s])oA[s]=eO[s];else oA[s]=BETA*oA[s-1]+(1-BETA)*perp[s]}
-    // 反向归纳
-    bA[TH2-1]=-0.0005*oA[TH2-1];
-    for(let s=TH2-2;s>=0;s--){const Os=oA[s],tgt=bA[s+1]+(oA[s+1]-Os);let b=tgt;
-      for(let i=0;i<30;i++){const f=fp2(b,Os,s),r=b+f-tgt;if(Math.abs(r)<1e-12)break;const d=1+(fp2(b+1e-8,Os,s)-f)/1e-8;if(Math.abs(d)<1e-15)break;b-=r/d}
-      bA[s]=b}
-    let mx=0;for(let s=0;s<TH2;s++){const np=oA[s]+bA[s];mx=Math.max(mx,Math.abs(np-perp[s]));perp[s]=np}
-    if(mx<1e-10)break;
-  }
-  // 最终一致性
-  oA[0]=eO[0];
-  for(let s=1;s<TH2;s++){if(ef[s])oA[s]=eO[s];else oA[s]=BETA*oA[s-1]+(1-BETA)*perp[s]}
-  for(let s=0;s<TH2;s++){bA[s]=perp[s]-oA[s];pA[s]=perp[s]}
-  return {oracle:oA,pfair:pA,basis:bA,total:TH2}
-}
-
-
 function compute(F,N){
   const S=F-N,delta=0.2*S;
   const oA=new Float64Array(TH),bA=new Float64Array(TH),pA=new Float64Array(TH),fA=new Float64Array(TH);
@@ -283,9 +224,9 @@ class ZC{
 }
 
 // 模型图表
-const zP=new ZC('pc','pw',TH),zP2=new ZC('pc2','pw2',TH2),zB=new ZC('bc','bw',TH),zD=new ZC('dc','dw',TH);
-const modelZooms=[zP,zP2,zB,zD];
-function modelRedraw(){drawModel();drawModelFixed();drawBasis();drawDelta()}
+const zP=new ZC('pc','pw',TH),zB=new ZC('bc','bw',TH),zD=new ZC('dc','dw',TH);
+const modelZooms=[zP,zB,zD];
+function modelRedraw(){drawModel();drawBasis();drawDelta()}
 for(const z of modelZooms){
   z._cb=()=>{for(const o of modelZooms)if(o!==z)o.sync(z);modelRedraw()};
 }
@@ -301,7 +242,7 @@ function onModelClick(e,z){
   crossStep=(crossStep===s)?null:s;
   modelRedraw();
 }
-for(const z of [zP,zP2,zB,zD]){
+for(const z of [zP,zB,zD]){
   z.c.addEventListener('click',e=>{if(z.wasDrag)return;onModelClick(e,z)});
 }
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&crossStep!==null){crossStep=null;modelRedraw()}})
@@ -356,73 +297,6 @@ function drawModel(){
     lines.forEach((l,i)=>{x.fillStyle=i===0?'#848d97':i===1?'#f47067':i===2?'#58a6ff':'#e6edf3';x.fillText(l,bx+6,by+14+i*lh)});
   }
 }
-
-// 缓存固定版模型
-let cvFixed=null,lF2=-1,lN2=-1;
-
-function drawModelFixed(){
-  const F=parseFloat($('Fi').value),N=parseFloat($('Ni').value);
-  if(F!==lF2||N!==lN2){cvFixed=computeFixed(F,N);lF2=F;lN2=N}
-  if(!cvFixed)return;
-  const T2=cvFixed.total;
-  const z=zP2,c=z.c,x=z.x,dp=devicePixelRatio||1,rc=z.w.getBoundingClientRect();
-  c.width=rc.width*dp;c.height=rc.height*dp;c.style.width=rc.width+'px';c.style.height=rc.height+'px';x.scale(dp,dp);
-  const W=rc.width,H=rc.height,p={t:18,r:50,b:26,l:52},cw=W-p.l-p.r,ch=H-p.t-p.b;x.clearRect(0,0,W,H);
-  const vL=Math.floor(z.vL),vR=Math.ceil(z.vR);
-  const yMn=Math.min(F,N)-2,yMx=Math.max(F,N)+2;
-  const xO=s=>p.l+((s-vL)/(vR-vL))*cw,yO=v=>p.t+(1-(v-yMn)/(yMx-yMn))*ch;
-  // 步→日期
-  function hd2(s){return new Date(ENTRY.getTime()+s*STEP2*60000)}
-  // CME关闭底色 (直接用主图的isOff保持一致)
-  x.fillStyle='rgba(48,54,61,0.25)';
-  for(let s=vL;s<=vR;s++){if(isOff(s))x.fillRect(xO(s),p.t,cw/(vR-vL),ch)}
-  // 换月线
-  x.strokeStyle='#da363360';x.lineWidth=1;x.setLineDash([4,4]);
-  for(const rd of RD_BN){
-    const rs=(rd.getTime()-ENTRY.getTime())/(STEP2*60000)-0.5;
-    if(rs>=vL&&rs<=vR){x.beginPath();x.moveTo(xO(rs),p.t);x.lineTo(xO(rs),p.t+ch);x.stroke()}
-  }
-  x.setLineDash([]);
-  // F/N 参考
-  x.strokeStyle='#f4706730';x.lineWidth=1;x.setLineDash([2,6]);x.beginPath();x.moveTo(p.l,yO(F));x.lineTo(W-p.r,yO(F));x.stroke();
-  x.strokeStyle='#3fb95030';x.beginPath();x.moveTo(p.l,yO(N));x.lineTo(W-p.r,yO(N));x.stroke();x.setLineDash([]);
-  x.font='9px Consolas';x.fillStyle='#f4706780';x.textAlign='right';x.fillText('F=$'+F.toFixed(1),W-p.r-3,yO(F)-3);
-  x.fillStyle='#3fb95080';x.fillText('N=$'+N.toFixed(1),W-p.r-3,yO(N)+10);
-  // 阶梯线
-  function st(d,cl,lw){x.strokeStyle=cl;x.lineWidth=lw;x.beginPath();for(let s=vL;s<=vR;s++){if(s<0||s>=T2)continue;const x0=xO(s),x1=xO(s+1),y=yO(d[s]);s===vL?x.moveTo(x0,y):x.lineTo(x0,y);x.lineTo(Math.min(x1,W-p.r),y)}x.stroke()}
-  st(cvFixed.oracle,'#f47067',2);
-  st(cvFixed.pfair,'#3fb950',2);
-  // 当前时刻
-  const cur=Math.min(parseInt($('ti').value),T2-1);
-  if(cur>=vL&&cur<=vR){x.strokeStyle='#e6edf3';x.lineWidth=1.5;x.beginPath();x.moveTo(xO(cur),p.t);x.lineTo(xO(cur),p.t+ch);x.stroke();
-    x.fillStyle='#f47067';x.beginPath();x.arc(xO(cur),yO(cvFixed.oracle[cur]),3.5,0,Math.PI*2);x.fill();
-    x.fillStyle='#3fb950';x.beginPath();x.arc(xO(cur),yO(cvFixed.pfair[cur]),3.5,0,Math.PI*2);x.fill();
-    x.font='10px Consolas';x.textAlign='left';
-    x.fillStyle='#f47067';x.fillText('O:$'+cvFixed.oracle[cur].toFixed(2),xO(cur)+8,yO(cvFixed.oracle[cur])-5);
-    x.fillStyle='#3fb950';x.fillText('BN:$'+cvFixed.pfair[cur].toFixed(2),xO(cur)+8,yO(cvFixed.pfair[cur])+12)}
-  // Y轴
-  x.fillStyle='#484f58';x.font='9px Consolas';x.textAlign='right';
-  for(let i=0;i<=6;i++){const v=yMn+(yMx-yMn)*i/6;x.fillText('$'+v.toFixed(1),p.l-4,yO(v)+3);x.strokeStyle='#21262d';x.lineWidth=.5;x.beginPath();x.moveTo(p.l,yO(v));x.lineTo(W-p.r,yO(v));x.stroke()}
-  // X轴
-  x.fillStyle='#484f58';x.textAlign='center';
-  const sRange=vR-vL,ds2=sRange>300?48:sRange>120?24:sRange>48?12:6;
-  for(let s=Math.ceil(vL/ds2)*ds2;s<=vR;s+=ds2){const d=hd2(s);x.fillText(ds2>=24?`${d.getUTCMonth()+1}/${d.getUTCDate()}`:`${d.getUTCDate()}/${d.getUTCHours()}h`,xO(s),H-7)}
-  // 十字线
-  if(crossStep!==null&&crossStep>=vL&&crossStep<=vR&&crossStep>=0&&crossStep<T2){
-    const cs2=crossStep,cx=xO(cs2);
-    x.strokeStyle='#e6edf340';x.lineWidth=1;x.setLineDash([3,3]);x.beginPath();x.moveTo(cx,p.t);x.lineTo(cx,p.t+ch);x.stroke();x.setLineDash([]);
-    const dt=hd2(cs2),ts=`${dt.getUTCMonth()+1}/${dt.getUTCDate()} ${String(dt.getUTCHours()).padStart(2,'0')}:00`;
-    const oV=cvFixed.oracle[cs2],pV=cvFixed.pfair[cs2],bV=cvFixed.basis[cs2];
-    const lines=[ts,`O: $${oV.toFixed(2)}`,`BN: $${pV.toFixed(2)}`,`Basis: $${bV.toFixed(4)}`];
-    x.font='10px Consolas';const lh=14,bw=130,bh=lines.length*lh+8;
-    const bx=cx+10+bw>W-p.r?cx-bw-10:cx+10,by=p.t+5;
-    x.fillStyle='rgba(22,27,34,0.92)';x.strokeStyle='#30363d';x.lineWidth=1;
-    x.beginPath();x.roundRect(bx,by,bw,bh,4);x.fill();x.stroke();
-    x.textAlign='left';
-    lines.forEach((l,i)=>{x.fillStyle=i===0?'#848d97':i===1?'#f47067':i===2?'#3fb950':'#d29922';x.fillText(l,bx+6,by+14+i*lh)});
-  }
-}
-
 
 function drawBasis(){
   if(!cv)return;
@@ -686,11 +560,9 @@ let cv=null,lF=-1,lN=-1;
 
 function ren(){
   const F=parseFloat($('Fi').value),N=parseFloat($('Ni').value),h=Math.min(parseInt($('ti').value),TH-1);
-  if(F!==lF||N!==lN){cv=compute(F,N);cvFixed=computeFixed(F,N);lF=F;lN=N;lF2=F;lN2=N}
+  if(F!==lF||N!==lN){cv=compute(F,N);lF=F;lN=N}
   const w=gw(h),O=cv.oracle[h],b=cv.basis[h],P=cv.pfair[h],S=F-N,fr=cv.frate[h];
-  const Pbn=cvFixed&&h<cvFixed.total?cvFixed.pfair[h]:P;
   $('vP').textContent='$'+P.toFixed(2);
-  $('vPbn').textContent='$'+Pbn.toFixed(2);
   $('vO').textContent='$'+O.toFixed(2);
   $('vB').textContent=(b>=0?'+':'')+b.toFixed(4);
   $('vBp').textContent=(b/O*100).toFixed(3)+'%';
