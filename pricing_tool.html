@@ -69,6 +69,11 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#0d1117;color:#e6edf
     <span id="liveStatus" style="font-size:10px;color:#484f58;margin-left:6px"></span>
   </div>
 
+  <div id="ibStaleWarn" style="display:none;background:#3a1d1d;border:1px solid #da3633;border-radius:6px;padding:8px;margin-bottom:8px;font-size:11px;color:#f47067">
+    ⚠ <b>IBKR 数据已停止更新</b> <span id="ibStaleAge" style="color:#f0883e"></span><br>
+    <span style="color:#8b949e;font-size:10px">F/N 价格保持上次值不变，模型价/Oracle/偏差/Basis 在历史图上将呈现为水平直线，直到 IBKR 重新连上。</span>
+  </div>
+
   <div class="livepanel" id="livePanel">
     <div style="color:#3fb950;margin-bottom:4px">● 实时数据 <span id="lvTS" style="color:#8b949e;font-size:9px"></span></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;font-size:10px">
@@ -781,6 +786,17 @@ async function liveTick(){
       const lag=now-dataTs;
       $('lvLag').textContent=lag.toFixed(1)+'s';
       $('lvLag').style.color=lag>10?'#f47067':'#3fb950';
+    }
+
+    // IBKR 断开警告 (ib_data_ts 超过60秒未更新)
+    const ibAge=d.ib_data_ts?now-d.ib_data_ts:Infinity;
+    if(ibAge>60){
+      $('ibStaleWarn').style.display='block';
+      const mins=Math.floor(ibAge/60);
+      const secs=Math.floor(ibAge%60);
+      $('ibStaleAge').textContent='(已停滞 '+(mins>0?mins+'分':'')+secs+'秒)';
+    }else{
+      $('ibStaleWarn').style.display='none';
     }
 
     // 追加历史
