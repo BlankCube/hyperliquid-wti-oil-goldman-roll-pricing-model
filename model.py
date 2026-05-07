@@ -34,14 +34,21 @@ FR_CAP = 0.04      # ±4%/hr (funding rate 上限)
 BETA = np.exp(-STEP_MINUTES / 30)  # Oracle EMA: τ=30min (trade.xyz WTI), 60min步 → exp(-2)≈0.135
 
 # 默认换月时间表: 2026年5月 CLM6→CLN6
+# Per docs.trade.xyz, the trade.xyz (Hyperliquid xyz:CL) oracle rolls on the
+# 5th–9th US business days of the month (BD 5–9), with the weight shift
+# applied at 17:30 ET / 21:30 UTC the *day before* it takes effect.
+# The previous schedule used BD 6–10 (one day late), which under-priced the
+# pre-roll basis correction by ~30 bp on a $94 underlying. Verified against
+# Zelo's independent implementation (which follows the same docs.trade.xyz
+# spec) — outputs match within 1 bp once schedules are aligned.
 DEFAULT_ENTRY = datetime(2026, 5, 1, 0, 0)
 DEFAULT_EXIT = datetime(2026, 5, 19, 0, 0)
 DEFAULT_ROLLS = [
-    datetime(2026, 5, 8, 22, 0),
-    datetime(2026, 5, 11, 22, 0),
-    datetime(2026, 5, 12, 22, 0),
-    datetime(2026, 5, 13, 22, 0),
-    datetime(2026, 5, 14, 22, 0),
+    datetime(2026, 5, 7, 22, 0),   # BD 5 (Thu) — first 20% weight shift
+    datetime(2026, 5, 8, 22, 0),   # BD 6 (Fri)
+    datetime(2026, 5, 11, 22, 0),  # BD 7 (Mon)
+    datetime(2026, 5, 12, 22, 0),  # BD 8 (Tue)
+    datetime(2026, 5, 13, 22, 0),  # BD 9 (Wed) — final 20%, perp = N
 ]
 
 

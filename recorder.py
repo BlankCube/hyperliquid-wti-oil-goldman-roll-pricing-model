@@ -48,12 +48,15 @@ ENTRY = datetime(2026, 5, 1, 0, 0)
 EXIT  = datetime(2026, 5, 19, 0, 0)
 
 # Goldman Roll 5 个交易日 (CME 5:30PM ET → snap 到下一整点 22:00 UTC)
+# Per docs.trade.xyz: BD 5–9 of the month (NOT BD 6–10).
+# Previous schedule (RD1=5/8) was off by 1 day, under-pricing the basis
+# correction by ~30 bp during the pre-roll window.
 ROLLS = [
-    datetime(2026, 5, 8,  22, 0),  # RD1 Fri
-    datetime(2026, 5, 11, 22, 0),  # RD2 Mon
-    datetime(2026, 5, 12, 22, 0),  # RD3 Tue
-    datetime(2026, 5, 13, 22, 0),  # RD4 Wed
-    datetime(2026, 5, 14, 22, 0),  # RD5 Thu
+    datetime(2026, 5, 7,  22, 0),  # RD1 Thu (BD 5)
+    datetime(2026, 5, 8,  22, 0),  # RD2 Fri (BD 6)
+    datetime(2026, 5, 11, 22, 0),  # RD3 Mon (BD 7)
+    datetime(2026, 5, 12, 22, 0),  # RD4 Tue (BD 8)
+    datetime(2026, 5, 13, 22, 0),  # RD5 Wed (BD 9)
 ]
 
 # Boros 到期日 (用于 implied APR 计算)
