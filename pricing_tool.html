@@ -588,13 +588,14 @@ setInterval(()=>{const d=new Date();$('utcClock').textContent=d.getUTCFullYear()
 // ================================================================
 // 实时模式
 // ================================================================
+const API='http://localhost:5111';
 let liveOn=false,liveTimer=null;
 const ENTRY_MS=ENTRY.getTime();
 function curH(){return Math.max(0,Math.min(Math.floor((Date.now()-ENTRY_MS)/(STEP_MIN*60000)),TH-1))}
 
 async function loadHist(){
   try{
-    const r=await fetch('http://localhost:5111/api/history?n=3000');
+    const r=await fetch(API+'/api/history?n=3000');
     const rows=await r.json();
     hist.epoch.length=0;hist.ts.length=0;hist.mP.length=0;hist.aP.length=0;hist.dev.length=0;hist.mAPR.length=0;hist.aAPR.length=0;hist.borosAPR.length=0;
     for(const d of rows){
@@ -615,7 +616,7 @@ async function loadHist(){
 
 async function liveTick(){
   try{
-    const r=await fetch('http://localhost:5111/api/prices');
+    const r=await fetch(API+'/api/prices');
     const d=await r.json();
     if(!d.F){$('liveStatus').textContent='无数据';return}
 

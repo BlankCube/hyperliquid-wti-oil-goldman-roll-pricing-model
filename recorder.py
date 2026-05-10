@@ -49,8 +49,7 @@ EXIT  = datetime(2026, 5, 19, 0, 0)
 
 # Goldman Roll 5 个交易日 (CME 5:30PM ET → snap 到下一整点 22:00 UTC)
 # Per docs.trade.xyz: BD 5–9 of the month (NOT BD 6–10).
-# Previous schedule (RD1=5/8) was off by 1 day, under-pricing the basis
-# correction by ~30 bp during the pre-roll window.
+# 见 https://docs.trade.xyz/consolidated-resources/roll-schedules
 ROLLS = [
     datetime(2026, 5, 7,  22, 0),  # RD1 Thu (BD 5)
     datetime(2026, 5, 8,  22, 0),  # RD2 Fri (BD 6)
@@ -61,6 +60,8 @@ ROLLS = [
 
 # Boros 到期日 (用于 implied APR 计算)
 BOROS_EXPIRY = datetime(2026, 5, 20, 0, 0)
+# Boros 模型期之外的稳态 FR (≈11.4% APR), 用于平均 FR APR 的尾部估算
+BOROS_TAIL_FR_HR = 0.000013
 
 # CME 期货合约月份 (前月/次月)
 CL_FRONT_MONTH = '202606'   # CLM26 = June 2026
@@ -214,14 +215,18 @@ def do_record():
     dev = hl_mid - mP
     devp = dev / mP * 100 if mP > 0 else None
 
-    # Boros: 累计剩余 FR → 平均 APR
+    # Boros: 模型期内累计 FR (缓存到模型对象, 模型不变时不重算) + 模型期外尾部
+    if '_cum_fr_suffix' not in r:
+        n = r['total_hours']
+        cs = np.zeros(n + 1)
+        for ss in range(n - 1, -1, -1):
+            cs[ss] = cs[ss + 1] + r['funding_rate'][ss] / STEPS_PER_HOUR
+        r['_cum_fr_suffix'] = cs
+    cum_fr_model = r['_cum_fr_suffix'][s] - r['_cum_fr_suffix'][r['total_hours'] - 1]
     hours_to_expiry = max(0, (BOROS_EXPIRY - t).total_seconds() / 3600)
-    model_end_step = r['total_hours'] - 1
-    cum_fr_model = sum(r['funding_rate'][ss] / STEPS_PER_HOUR for ss in range(s, model_end_step))
-    STEADY_FR_HR = 0.000013
-    model_end_time = ENTRY + timedelta(minutes=model_end_step * STEP_MINUTES)
+    model_end_time = ENTRY + timedelta(minutes=(r['total_hours'] - 1) * STEP_MINUTES)
     remaining_after = max(0, (BOROS_EXPIRY - model_end_time).total_seconds() / 3600)
-    cum_fr_total = cum_fr_model + STEADY_FR_HR * remaining_after
+    cum_fr_total = cum_fr_model + BOROS_TAIL_FR_HR * remaining_after
     boros_avg_fr_apr = (cum_fr_total / hours_to_expiry * 24 * 365 * 100) if hours_to_expiry > 0 else 0
 
     row = [
